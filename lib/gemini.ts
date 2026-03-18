@@ -104,3 +104,69 @@ Do not include any text outside the JSON.`
 
   return JSON.parse(cleaned)
 }
+
+export async function generateClarifyingQuestions(
+  platform: string,
+  shortPrompt: string
+): Promise<{ question: string; placeholder: string }[]> {
+  const prompt = `You are an expert prompt engineer specializing in crafting optimized prompts for AI platforms.
+
+The user wants to create a prompt for: "${platform}"
+Their initial idea: "${shortPrompt}"
+
+Generate 4 concise clarifying questions that will help you build a much better, more specific prompt for this platform.
+Tailor your questions based on what "${platform}" is best at (e.g. for image/video tools ask about style, mood, resolution; for text AI ask about tone, audience, format; for coding AI ask about language, constraints).
+
+Respond ONLY with a valid JSON array:
+[
+  { "question": "Question text?", "placeholder": "Example answer hint" },
+  { "question": "Question text?", "placeholder": "Example answer hint" },
+  { "question": "Question text?", "placeholder": "Example answer hint" },
+  { "question": "Question text?", "placeholder": "Example answer hint" }
+]
+
+Do not include any text outside the JSON.`
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+  })
+
+  const text = (response.text ?? "").trim()
+  const cleaned = text.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim()
+  return JSON.parse(cleaned)
+}
+
+export async function buildFullPrompt(
+  platform: string,
+  shortPrompt: string,
+  qa: { question: string; answer: string }[]
+): Promise<string> {
+  const answersText = qa
+    .filter((q) => q.answer.trim())
+    .map((q) => `Q: ${q.question}\nA: ${q.answer}`)
+    .join("\n\n")
+
+  const prompt = `You are an expert prompt engineer. Build a highly optimized, ready-to-use prompt for "${platform}".
+
+User's original idea: "${shortPrompt}"
+
+Additional context from clarifying questions:
+${answersText}
+
+Instructions:
+- Write the prompt AS IF the user will paste it directly into ${platform}
+- Optimize the structure, wording, and format specifically for how ${platform} works best
+- For image/video platforms (Midjourney, Kling, Runway, Stable Diffusion): use descriptive visual language, style references, technical parameters
+- For text AI (Claude, ChatGPT, Gemini): use clear instructions, role setting, output format specification
+- For coding AI: include language, constraints, expected output format
+- Make it detailed, specific, and immediately usable
+- Do NOT add any explanation or preamble — output ONLY the prompt itself, nothing else`
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+  })
+
+  return (response.text ?? "").trim()
+}
