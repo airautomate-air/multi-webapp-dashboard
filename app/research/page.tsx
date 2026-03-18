@@ -37,7 +37,7 @@ export default function ResearchPage() {
         body: JSON.stringify({ topic }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to generate research")
+      if (!res.ok) throw new Error(data.detail || data.error || "Failed to generate research")
       setResult(data)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong")

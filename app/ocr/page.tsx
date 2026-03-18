@@ -51,7 +51,7 @@ export default function OcrPage() {
       const res = await fetch("/api/ocr", { method: "POST", body: formData })
       const data = await res.json()
 
-      if (!res.ok) throw new Error(data.error || "Failed to process")
+      if (!res.ok) throw new Error(data.detail || data.error || "Failed to process")
       setResult(data)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong")

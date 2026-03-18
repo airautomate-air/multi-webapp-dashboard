@@ -1,7 +1,7 @@
 "use client"
 
 import { GlowCard } from "@/components/ui/spotlight-card"
-import { FileText, BookOpen } from "lucide-react"
+import { FileText, BookOpen, Mic } from "lucide-react"
 import Link from "next/link"
 
 const apps = [
@@ -21,11 +21,19 @@ const apps = [
       "Enter any topic and get an AI-powered research summary exported as a PDF to Google Drive.",
     glowColor: "purple" as const,
   },
+  {
+    href: "/meeting",
+    icon: Mic,
+    title: "Meeting Transcription",
+    description:
+      "Transcribe meetings live, get an AI summary with action items, and save everything to Google Sheets.",
+    glowColor: "blue" as const,
+  },
 ]
 
 export default function AppGrid({ isSignedIn }: { isSignedIn: boolean }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 justify-items-center">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">
       {apps.map((app) => (
         <Link
           key={app.href}

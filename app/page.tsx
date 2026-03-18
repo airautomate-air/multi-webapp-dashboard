@@ -2,14 +2,15 @@ import { auth } from "@/lib/auth"
 import { signIn, signOut } from "@/lib/auth"
 import { LogIn, LogOut } from "lucide-react"
 import AppGrid from "@/components/app-grid"
+import { AuroraBackground } from "@/components/ui/aurora-background"
 
 export default async function Home() {
   const session = await auth()
 
   return (
-    <div className="min-h-screen bg-[#fafaf9]">
+    <AuroraBackground className="min-h-screen h-auto items-start justify-start">
       {/* Header */}
-      <header className="border-b border-stone-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="w-full border-b border-stone-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <span
             className="text-xl font-semibold tracking-tight text-stone-900"
@@ -59,7 +60,7 @@ export default async function Home() {
       </header>
 
       {/* Hero */}
-      <main className="max-w-5xl mx-auto px-6 pt-16 pb-24">
+      <main className="w-full max-w-5xl mx-auto px-6 pt-16 pb-24">
         <div className="mb-16 text-center">
           <h1
             className="text-5xl sm:text-6xl font-light text-stone-900 mb-4 tracking-tight leading-tight"
@@ -82,6 +83,6 @@ export default async function Home() {
 
         <AppGrid isSignedIn={!!session} />
       </main>
-    </div>
+    </AuroraBackground>
   )
 }

@@ -88,8 +88,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("OCR error:", error)
+    const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
-      { error: "Failed to process images" },
+      { error: "Failed to process images", detail: message },
       { status: 500 }
     )
   }

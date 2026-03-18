@@ -52,6 +52,30 @@
   --radius: 0.75rem;
 }
 
+@keyframes aurora {
+  from {
+    background-position: 50% 50%, 50% 50%;
+  }
+  to {
+    background-position: 350% 50%, 350% 50%;
+  }
+}
+
+@theme inline {
+  --animate-aurora: aurora 60s linear infinite;
+}
+
+:root {
+  --white: #ffffff;
+  --black: #000000;
+  --transparent: transparent;
+  --blue-500: #06b6d4;
+  --indigo-300: #6ee7b7;
+  --blue-300: #67e8f9;
+  --violet-200: #a7f3d0;
+  --blue-400: #34d399;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

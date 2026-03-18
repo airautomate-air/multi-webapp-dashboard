@@ -143,8 +143,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Research error:", error)
+    const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
-      { error: "Failed to generate research" },
+      { error: "Failed to generate research", detail: message },
       { status: 500 }
     )
   }
