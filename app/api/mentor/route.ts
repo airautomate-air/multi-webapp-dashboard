@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
+import { auth } from "@/lib/auth"
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -25,6 +26,11 @@ Structure your responses with clear labeled sections where appropriate: lead wit
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth()
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    }
+
     const { messages, patterns } = await request.json()
 
     if (!messages || !Array.isArray(messages)) {
@@ -42,7 +48,8 @@ export async function POST(request: NextRequest) {
       messages,
     })
 
-    const reply = response.content[0].type === "text" ? response.content[0].text : ""
+    const firstBlock = response.content[0]
+    const reply = firstBlock?.type === "text" ? firstBlock.text : ""
     return NextResponse.json({ reply })
   } catch (err: unknown) {
     console.error("Mentor API error:", err)
