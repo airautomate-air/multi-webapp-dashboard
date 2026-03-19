@@ -2,15 +2,15 @@ import { auth } from "@/lib/auth"
 import { signIn, signOut } from "@/lib/auth"
 import { LogIn, LogOut } from "lucide-react"
 import AppGrid from "@/components/app-grid"
-import { AuroraBackground } from "@/components/ui/aurora-background"
+import { WeatherBackground } from "@/components/weather-background"
 
 export default async function Home() {
   const session = await auth()
 
   return (
-    <AuroraBackground className="min-h-screen h-auto items-start justify-start">
+    <WeatherBackground>
       {/* Header */}
-      <header className="w-full border-b border-stone-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="w-full border-b border-white/20 bg-white/70 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <span
             className="text-xl font-semibold tracking-tight text-stone-900"
@@ -63,19 +63,19 @@ export default async function Home() {
       <main className="w-full max-w-5xl mx-auto px-6 pt-16 pb-24">
         <div className="mb-16 text-center">
           <h1
-            className="text-5xl sm:text-6xl font-light text-stone-900 mb-4 tracking-tight leading-tight"
+            className="text-5xl sm:text-6xl font-light text-stone-900 mb-4 tracking-tight leading-tight drop-shadow-sm"
             style={{ fontFamily: "var(--font-display)" }}
           >
             Your Tools,
             <br />
             <span className="font-semibold italic">All in One Place</span>
           </h1>
-          <p className="text-stone-500 text-lg max-w-md mx-auto leading-relaxed">
+          <p className="text-stone-600 text-lg max-w-md mx-auto leading-relaxed">
             A personal suite of AI-powered tools. Select an app below to get
             started.
           </p>
           {!session && (
-            <p className="mt-4 text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 inline-block">
+            <p className="mt-4 text-sm text-amber-600 bg-amber-50/90 border border-amber-200 rounded-lg px-4 py-2 inline-block">
               Sign in with Google to use these tools and save files to Drive.
             </p>
           )}
@@ -83,6 +83,6 @@ export default async function Home() {
 
         <AppGrid isSignedIn={!!session} />
       </main>
-    </AuroraBackground>
+    </WeatherBackground>
   )
 }
