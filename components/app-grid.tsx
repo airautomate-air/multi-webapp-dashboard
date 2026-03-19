@@ -1,7 +1,7 @@
 "use client"
 
 import { GlowCard } from "@/components/ui/spotlight-card"
-import { FileText, BookOpen, Mic, Wand2 } from "lucide-react"
+import { FileText, BookOpen, Mic, Wand2, Brain } from "lucide-react"
 import Link from "next/link"
 
 const apps = [
@@ -35,6 +35,14 @@ const apps = [
     title: "Prompt Builder",
     description:
       "Pick your AI platform, describe your idea, answer a few questions, and get a fully optimized prompt.",
+    glowColor: "purple" as const,
+  },
+  {
+    href: "/mentor",
+    icon: Brain,
+    title: "Mentor",
+    description:
+      "Share an idea, plan, or piece of work. Get ruthless feedback — no praise, no curve. Just truth.",
     glowColor: "purple" as const,
   },
 ]
