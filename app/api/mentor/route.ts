@@ -37,6 +37,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "messages array required" }, { status: 400 })
     }
 
+    const isValidMessage = (m: unknown): m is { role: "user" | "assistant"; content: string } =>
+      typeof m === "object" &&
+      m !== null &&
+      ((m as { role: unknown }).role === "user" || (m as { role: unknown }).role === "assistant") &&
+      typeof (m as { content: unknown }).content === "string"
+
+    if (!messages.every(isValidMessage)) {
+      return NextResponse.json({ error: "invalid messages format" }, { status: 400 })
+    }
+
     const systemPrompt = patterns?.length
       ? `${MENTOR_PERSONA}\n\nKnown patterns about this user: ${patterns.join(", ")}.`
       : MENTOR_PERSONA
