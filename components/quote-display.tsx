@@ -34,11 +34,16 @@ function readStorage(): {
   }
 }
 
-function writeStorage(quotes: Quote[], index: number) {
+function writeStorage(quotes: Quote[], index: number, opts: { fetchedAt?: string; lastRotated?: string } = {}) {
   try {
     localStorage.setItem(STORAGE_KEYS.quotes, JSON.stringify(quotes))
     localStorage.setItem(STORAGE_KEYS.index, String(index))
-    localStorage.setItem(STORAGE_KEYS.lastRotated, new Date().toISOString())
+    if (opts.lastRotated !== undefined) {
+      localStorage.setItem(STORAGE_KEYS.lastRotated, opts.lastRotated)
+    }
+    if (opts.fetchedAt !== undefined) {
+      localStorage.setItem(STORAGE_KEYS.fetchedAt, opts.fetchedAt)
+    }
   } catch {
     // Ignore storage errors
   }
@@ -50,7 +55,6 @@ async function fetchQuotes(): Promise<Quote[]> {
     if (!res.ok) return [FALLBACK]
     const data = await res.json()
     if (Array.isArray(data) && data.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.fetchedAt, new Date().toISOString())
       return data as Quote[]
     }
     return [FALLBACK]
@@ -65,9 +69,14 @@ export default function QuoteDisplay() {
 
   useEffect(() => {
     async function loadQuote() {
-      let { quotes, fetchedAt, index, lastRotated } = readStorage()
+      const stored = readStorage()
+      let quotes = stored.quotes
+      const fetchedAt = stored.fetchedAt
+      let index = isNaN(stored.index) ? 0 : stored.index
+      const lastRotated = stored.lastRotated
 
       const now = new Date()
+      const nowISO = now.toISOString()
       const hourMs = 60 * 60 * 1000
       const dayMs = 24 * hourMs
 
@@ -83,12 +92,17 @@ export default function QuoteDisplay() {
       const batchExpired =
         !fetchedAt || now.getTime() - new Date(fetchedAt).getTime() > dayMs
 
+      let newFetchedAt: string | undefined
       if (index >= quotes.length || quotes.length === 0 || batchExpired) {
         quotes = await fetchQuotes()
         index = 0
+        newFetchedAt = nowISO
       }
 
-      writeStorage(quotes, index)
+      writeStorage(quotes, index, {
+        lastRotated: needsRotation ? nowISO : undefined,
+        fetchedAt: newFetchedAt,
+      })
       setQuote(quotes[index] ?? FALLBACK)
       setLoaded(true)
     }
@@ -100,7 +114,7 @@ export default function QuoteDisplay() {
     return (
       <div className="flex flex-col h-full justify-between">
         <div className="p-1">
-          <div className="w-10 h-10 rounded-xl bg-white/60 border border-stone-200 flex items-center justify-center mb-4 shadow-sm">
+          <div className="w-9 h-9 rounded-xl bg-white/60 border border-stone-200 flex items-center justify-center mb-4 shadow-sm">
             <span className="text-lg">✨</span>
           </div>
           <div className="h-3 bg-stone-200/60 rounded animate-pulse mb-2 w-3/4" />
@@ -118,7 +132,7 @@ export default function QuoteDisplay() {
   return (
     <div className="flex flex-col h-full justify-between relative z-10">
       <div className="p-1">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 shadow-sm"
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-4 shadow-sm"
           style={{ background: "linear-gradient(135deg, #c8d8c8, #e8f0e8)", border: "1px solid #b8ccb8" }}>
           <span className="text-lg">✨</span>
         </div>
