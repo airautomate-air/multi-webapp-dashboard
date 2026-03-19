@@ -15,7 +15,7 @@ interface GlowCardProps {
 const glowColorMap = {
   blue: { base: 220, spread: 200 },
   purple: { base: 280, spread: 300 },
-  green: { base: 120, spread: 200 },
+  green: { base: 140, spread: 150 },
   red: { base: 0, spread: 200 },
   orange: { base: 30, spread: 200 }
 };

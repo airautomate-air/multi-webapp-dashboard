@@ -1,10 +1,21 @@
 "use client"
 
+import React from "react"
 import { GlowCard } from "@/components/ui/spotlight-card"
-import { FileText, BookOpen, Mic, Wand2, Brain } from "lucide-react"
+import { FileText, BookOpen, Mic, Wand2, Brain, Sparkles } from "lucide-react"
 import Link from "next/link"
+import QuoteDisplay from "@/components/quote-display"
 
-const apps = [
+interface App {
+  href: string
+  icon: React.ElementType
+  title: string
+  description: string
+  glowColor: "blue" | "purple" | "green" | "red" | "orange"
+  renderContent?: () => React.ReactNode
+}
+
+const apps: App[] = [
   {
     href: "/ocr",
     icon: FileText,
@@ -45,6 +56,14 @@ const apps = [
       "Share an idea, plan, or piece of work. Get ruthless feedback — no praise, no curve. Just truth.",
     glowColor: "purple" as const,
   },
+  {
+    href: "/positive-vibes",
+    icon: Sparkles,
+    title: "Positive Vibes",
+    description: "Your daily dose of calm and inspiration.",
+    glowColor: "green" as const,
+    renderContent: () => <QuoteDisplay />,
+  },
 ]
 
 export default function AppGrid({ isSignedIn }: { isSignedIn: boolean }) {
@@ -76,9 +95,13 @@ export default function AppGrid({ isSignedIn }: { isSignedIn: boolean }) {
                 >
                   {app.title}
                 </h2>
+              {app.renderContent ? (
+                app.renderContent()
+              ) : (
                 <p className="text-sm text-stone-500 leading-relaxed">
                   {app.description}
                 </p>
+              )}
               </div>
               <div className="flex items-center gap-1 text-xs font-medium text-stone-400 group-hover:text-stone-600 transition-colors">
                 Open tool
