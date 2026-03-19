@@ -10,10 +10,10 @@ export default async function Home() {
   return (
     <WeatherBackground>
       {/* Header */}
-      <header className="w-full border-b border-white/20 bg-white/70 backdrop-blur-md sticky top-0 z-50">
+      <header className="w-full border-b border-white/10 bg-black/25 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <span
-            className="text-xl font-semibold tracking-tight text-stone-900"
+            className="text-xl font-semibold tracking-tight text-white"
             style={{ fontFamily: "var(--font-display)" }}
           >
             My Dashboard
@@ -63,19 +63,25 @@ export default async function Home() {
       <main className="w-full max-w-5xl mx-auto px-6 pt-16 pb-24">
         <div className="mb-16 text-center">
           <h1
-            className="text-5xl sm:text-6xl font-light text-stone-900 mb-4 tracking-tight leading-tight drop-shadow-sm"
-            style={{ fontFamily: "var(--font-display)" }}
+            className="text-5xl sm:text-6xl font-light text-white mb-4 tracking-tight leading-tight"
+            style={{
+              fontFamily: "var(--font-display)",
+              textShadow: "0 2px 20px rgba(0,0,0,0.4)",
+            }}
           >
             Your Tools,
             <br />
             <span className="font-semibold italic">All in One Place</span>
           </h1>
-          <p className="text-stone-600 text-lg max-w-md mx-auto leading-relaxed">
+          <p
+            className="text-white/75 text-lg max-w-md mx-auto leading-relaxed"
+            style={{ textShadow: "0 1px 8px rgba(0,0,0,0.5)" }}
+          >
             A personal suite of AI-powered tools. Select an app below to get
             started.
           </p>
           {!session && (
-            <p className="mt-4 text-sm text-amber-600 bg-amber-50/90 border border-amber-200 rounded-lg px-4 py-2 inline-block">
+            <p className="mt-4 text-sm text-amber-200 bg-black/30 backdrop-blur-sm border border-white/20 rounded-lg px-4 py-2 inline-block">
               Sign in with Google to use these tools and save files to Drive.
             </p>
           )}
