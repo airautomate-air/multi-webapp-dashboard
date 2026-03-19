@@ -16,10 +16,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    const { messages } = await request.json()
+    let messages: unknown
+    try {
+      const body = await request.json()
+      messages = body?.messages
+    } catch {
+      return NextResponse.json({ error: "invalid messages format" }, { status: 400 })
+    }
 
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: "messages array required" }, { status: 400 })
+      return NextResponse.json({ error: "invalid messages format" }, { status: 400 })
     }
 
     const isValidMessage = (m: unknown): m is { role: "user" | "model"; content: string } =>
