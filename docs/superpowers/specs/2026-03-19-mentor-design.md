@@ -179,8 +179,8 @@ app/
   api/
     mentor/
       route.ts             ← POST /api/mentor
-    mentor-extract/
-      route.ts             ← POST /api/mentor/extract-patterns
+      extract-patterns/
+        route.ts           ← POST /api/mentor/extract-patterns
 components/
   app-grid.tsx             ← add Mentor card
 ```
