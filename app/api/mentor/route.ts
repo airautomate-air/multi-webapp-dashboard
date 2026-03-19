@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import Anthropic from "@anthropic-ai/sdk"
+import { GoogleGenAI } from "@google/genai"
 import { auth } from "@/lib/auth"
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
 
 const MENTOR_PERSONA = `You are my ruthless mentor. Your job is not to make me feel good. Your job is to make me better. When I share an idea, plan, or piece of work, tell me what is actually wrong with it.
 
@@ -51,15 +51,18 @@ export async function POST(request: NextRequest) {
       ? `${MENTOR_PERSONA}\n\nKnown patterns about this user: ${patterns.join(", ")}.`
       : MENTOR_PERSONA
 
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages,
+    const contents = messages.map((m: { role: "user" | "assistant"; content: string }) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }))
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      config: { systemInstruction: systemPrompt },
+      contents,
     })
 
-    const firstBlock = response.content[0]
-    const reply = firstBlock?.type === "text" ? firstBlock.text : ""
+    const reply = response.text ?? ""
     return NextResponse.json({ reply })
   } catch (err: unknown) {
     console.error("Mentor API error:", err)
