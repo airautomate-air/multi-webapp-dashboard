@@ -166,13 +166,13 @@ export default function PositiveVibesPage() {
 
     recorder.start()
 
-    // Combined level tracking + silence detection
+    // Level tracking + silence detection
     const buf = new Uint8Array(analyser.frequencyBinCount)
     let silenceStart: number | null = null
-    let speechDetected = false
-    const SPEECH_THRESHOLD = 15   // avg energy to count as speech start
-    const SILENCE_THRESHOLD = 8   // avg energy to count as silence
-    const SILENCE_DURATION = 1800 // ms of silence before auto-stop
+    const SILENCE_THRESHOLD = 10  // avg energy below this = silence
+    const SILENCE_DURATION = 1500 // ms of silence before auto-stop
+    const warmupEnd = Date.now() + 1500  // 1.5s before silence detection starts
+    const maxEnd = Date.now() + 15000   // 15s hard stop
 
     const tick = () => {
       if (!analyserRef.current || recorderRef.current !== recorder) return
@@ -180,13 +180,19 @@ export default function PositiveVibesPage() {
       const avg = buf.reduce((s, v) => s + v, 0) / buf.length
       setAudioLevel(Math.min(1, avg / 100))
 
-      // Wait for initial speech before counting silence
-      if (avg > SPEECH_THRESHOLD) speechDetected = true
+      const now = Date.now()
 
-      if (speechDetected) {
+      // Hard timeout fallback
+      if (now >= maxEnd) {
+        recorder.stop()
+        return
+      }
+
+      // After warmup, check for silence
+      if (now > warmupEnd) {
         if (avg < SILENCE_THRESHOLD) {
-          if (silenceStart === null) silenceStart = Date.now()
-          else if (Date.now() - silenceStart >= SILENCE_DURATION) {
+          if (silenceStart === null) silenceStart = now
+          else if (now - silenceStart >= SILENCE_DURATION) {
             recorder.stop()
             return
           }
