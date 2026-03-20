@@ -95,8 +95,24 @@ export default function PositiveVibesPage() {
   }, [stopLevelTracking])
 
   const startListening = useCallback(async () => {
-    // Clean up any previous mic resources before opening new ones
-    stopMic()
+    // Null out old recognition handlers BEFORE stopping — prevents re-entrant startListening calls
+    // (stopping a recognition fires onerror("aborted") which would call startListening again)
+    const oldRec = recognitionRef.current
+    if (oldRec) {
+      oldRec.onresult = null
+      oldRec.onerror = null
+      oldRec.onend = null
+      oldRec.stop()
+      recognitionRef.current = null
+    }
+    // Clean up old audio resources directly (not via stopMic, to avoid touching recognition again)
+    stopLevelTracking()
+    micStreamRef.current?.getTracks().forEach((t) => t.stop())
+    micStreamRef.current = null
+    audioCtxRef.current?.close()
+    audioCtxRef.current = null
+    analyserRef.current = null
+
     setError(null)
     setVoiceState("listening")
 
@@ -164,7 +180,7 @@ export default function PositiveVibesPage() {
     rec.onend = () => { /* handled in onresult / onerror */ }
     rec.start()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startLevelTracking, stopMic])
+  }, [startLevelTracking, stopLevelTracking, stopMic])
 
   // ── TTS ─────────────────────────────────────────────────────────────
   const speakNext = useCallback(() => {
