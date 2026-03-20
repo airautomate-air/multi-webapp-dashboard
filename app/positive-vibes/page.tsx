@@ -34,25 +34,20 @@ export default function PositiveVibesPage() {
   const [quote, setQuote] = useState({ q: "Breathe. This too shall pass.", a: "Unknown" })
   const [textInput, setTextInput] = useState("")
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
   const synthRef = useRef(typeof window !== "undefined" ? window.speechSynthesis : null)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const micStreamRef = useRef<MediaStream | null>(null)
   const levelRafRef = useRef<number>(0)
+  const recorderRef = useRef<MediaRecorder | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const utteranceQueueRef = useRef<string[]>([])
   const speakingRef = useRef(false)
   const autoLoopRef = useRef(true)
   const voiceStateRef = useRef<VoiceState>("idle")
-  // forward ref so speakNext can call itself without circular useCallback deps
   const speakNextRef = useRef<() => void>(() => {})
-  // forward ref so startListening always calls the latest sendMessage (avoids stale transcript)
   const sendMessageRef = useRef<(text: string) => Promise<void>>(async () => {})
-  // count consecutive network errors to avoid infinite silent retries
-  const networkRetryRef = useRef(0)
 
-  // keep voiceState ref in sync
   useEffect(() => { voiceStateRef.current = voiceState }, [voiceState])
 
   useEffect(() => {
@@ -65,49 +60,35 @@ export default function PositiveVibesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Mic level tracking ──────────────────────────────────────────────
-  const startLevelTracking = useCallback(() => {
-    const analyser = analyserRef.current
-    if (!analyser) return
-    const buf = new Uint8Array(analyser.frequencyBinCount)
-    const tick = () => {
-      analyser.getByteFrequencyData(buf)
-      const avg = buf.reduce((s, v) => s + v, 0) / buf.length
-      setAudioLevel(Math.min(1, avg / 100))
-      levelRafRef.current = requestAnimationFrame(tick)
-    }
-    levelRafRef.current = requestAnimationFrame(tick)
-  }, [])
-
-  const stopLevelTracking = useCallback(() => {
+  // ── Mic cleanup ─────────────────────────────────────────────────────
+  const stopMic = useCallback(() => {
     cancelAnimationFrame(levelRafRef.current)
     setAudioLevel(0)
-  }, [])
-
-  // ── Mic management ──────────────────────────────────────────────────
-  const stopMic = useCallback(() => {
-    stopLevelTracking()
+    // Null handlers before stopping so onstop doesn't trigger transcription
+    if (recorderRef.current) {
+      recorderRef.current.onstop = null
+      recorderRef.current.ondataavailable = null
+      if (recorderRef.current.state !== "inactive") recorderRef.current.stop()
+      recorderRef.current = null
+    }
     micStreamRef.current?.getTracks().forEach((t) => t.stop())
     micStreamRef.current = null
     audioCtxRef.current?.close()
     audioCtxRef.current = null
     analyserRef.current = null
-    recognitionRef.current?.stop()
-  }, [stopLevelTracking])
+  }, [])
 
+  // ── Start listening (MediaRecorder + Gemini transcription) ──────────
   const startListening = useCallback(async () => {
-    // Null out old recognition handlers BEFORE stopping — prevents re-entrant startListening calls
-    // (stopping a recognition fires onerror("aborted") which would call startListening again)
-    const oldRec = recognitionRef.current
-    if (oldRec) {
-      oldRec.onresult = null
-      oldRec.onerror = null
-      oldRec.onend = null
-      oldRec.stop()
-      recognitionRef.current = null
+    // Clean up previous recorder without triggering transcription
+    if (recorderRef.current) {
+      recorderRef.current.onstop = null
+      recorderRef.current.ondataavailable = null
+      if (recorderRef.current.state !== "inactive") recorderRef.current.stop()
+      recorderRef.current = null
     }
-    // Clean up old audio resources directly (not via stopMic, to avoid touching recognition again)
-    stopLevelTracking()
+    cancelAnimationFrame(levelRafRef.current)
+    setAudioLevel(0)
     micStreamRef.current?.getTracks().forEach((t) => t.stop())
     micStreamRef.current = null
     audioCtxRef.current?.close()
@@ -117,66 +98,108 @@ export default function PositiveVibesPage() {
     setError(null)
     setVoiceState("listening")
 
-    // Web Audio for level meter
+    let stream: MediaStream
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      micStreamRef.current = stream
-      const ctx = new AudioContext()
-      audioCtxRef.current = ctx
-      const source = ctx.createMediaStreamSource(stream)
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 256
-      source.connect(analyser)
-      analyserRef.current = analyser
-      startLevelTracking()
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     } catch {
-      // mic permission denied — recognition may still work
-    }
-
-    // Speech recognition
-    const SpeechRec =
-      (window as Window & { SpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ??
-      (window as Window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition
-    if (!SpeechRec) {
-      setError("Speech recognition not supported. Try Chrome or Edge.")
+      setError("Microphone access denied.")
       setVoiceState("idle")
-      stopMic()
       return
     }
+    micStreamRef.current = stream
 
-    const rec = new SpeechRec()
-    rec.continuous = false
-    rec.interimResults = false
-    rec.lang = "en-US"
-    recognitionRef.current = rec
+    // Web Audio for level meter
+    const ctx = new AudioContext()
+    audioCtxRef.current = ctx
+    const source = ctx.createMediaStreamSource(stream)
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 256
+    source.connect(analyser)
+    analyserRef.current = analyser
 
-    rec.onresult = async (e) => {
-      const text = e.results[0]?.[0]?.transcript?.trim() ?? ""
-      networkRetryRef.current = 0
-      if (!text) { startListening(); return }
-      stopMic()
-      await sendMessageRef.current(text)
+    // MediaRecorder
+    const chunks: BlobPart[] = []
+    const recorder = new MediaRecorder(stream)
+    recorderRef.current = recorder
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data)
     }
 
-    rec.onerror = (e) => {
-      if (e.error === "aborted" || e.error === "no-speech") {
-        networkRetryRef.current = 0
+    recorder.onstop = async () => {
+      // Clean up audio resources
+      cancelAnimationFrame(levelRafRef.current)
+      setAudioLevel(0)
+      micStreamRef.current?.getTracks().forEach((t) => t.stop())
+      micStreamRef.current = null
+      audioCtxRef.current?.close()
+      audioCtxRef.current = null
+      analyserRef.current = null
+
+      const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" })
+
+      // Too short = just noise, retry
+      if (blob.size < 1500) {
         if (autoLoopRef.current && voiceStateRef.current !== "idle") startListening()
-      } else if (e.error === "network") {
-        // Network errors mean Chrome can't reach Google's STT servers — silently go idle
-        networkRetryRef.current = 0
-        setVoiceState("idle")
-        stopMic()
-      } else {
-        setError(`Mic error: ${e.error}`)
-        setVoiceState("idle")
+        return
+      }
+
+      const fd = new FormData()
+      fd.append("audio", blob, "audio.webm")
+
+      try {
+        const res = await fetch("/api/positive-vibes/transcribe", {
+          method: "POST",
+          body: fd,
+        })
+        const data = await res.json()
+        const text = (data.text ?? "").trim()
+        if (!text) {
+          if (autoLoopRef.current && voiceStateRef.current !== "idle") startListening()
+          return
+        }
+        await sendMessageRef.current(text)
+      } catch {
+        if (autoLoopRef.current && voiceStateRef.current !== "idle") startListening()
       }
     }
 
-    rec.onend = () => { /* handled in onresult / onerror */ }
-    rec.start()
+    recorder.start()
+
+    // Combined level tracking + silence detection
+    const buf = new Uint8Array(analyser.frequencyBinCount)
+    let silenceStart: number | null = null
+    let speechDetected = false
+    const SPEECH_THRESHOLD = 15   // avg energy to count as speech start
+    const SILENCE_THRESHOLD = 8   // avg energy to count as silence
+    const SILENCE_DURATION = 1800 // ms of silence before auto-stop
+
+    const tick = () => {
+      if (!analyserRef.current || recorderRef.current !== recorder) return
+      analyser.getByteFrequencyData(buf)
+      const avg = buf.reduce((s, v) => s + v, 0) / buf.length
+      setAudioLevel(Math.min(1, avg / 100))
+
+      // Wait for initial speech before counting silence
+      if (avg > SPEECH_THRESHOLD) speechDetected = true
+
+      if (speechDetected) {
+        if (avg < SILENCE_THRESHOLD) {
+          if (silenceStart === null) silenceStart = Date.now()
+          else if (Date.now() - silenceStart >= SILENCE_DURATION) {
+            recorder.stop()
+            return
+          }
+        } else {
+          silenceStart = null
+        }
+      }
+
+      levelRafRef.current = requestAnimationFrame(tick)
+    }
+    levelRafRef.current = requestAnimationFrame(tick)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startLevelTracking, stopLevelTracking, stopMic])
+  }, [])
 
   // ── TTS ─────────────────────────────────────────────────────────────
   const speakNext = useCallback(() => {
@@ -198,7 +221,6 @@ export default function PositiveVibesPage() {
     synth.speak(utt)
   }, [startListening])
 
-  // keep ref up to date so recursive calls always see the latest closure
   useEffect(() => { speakNextRef.current = speakNext }, [speakNext])
 
   const speakQueue = useCallback((sentences: string[]) => {
@@ -246,7 +268,6 @@ export default function PositiveVibesPage() {
         buffer += chunk
         fullReply += chunk
 
-        // flush complete sentences to TTS
         const sentenceEnd = /[.!?。]\s*/g
         let match: RegExpExecArray | null
         let last = 0
@@ -258,7 +279,6 @@ export default function PositiveVibesPage() {
         buffer = buffer.slice(last)
       }
 
-      // flush remainder
       if (buffer.trim()) speakQueue([buffer.trim()])
       setTranscript((prev) => [...prev, { role: "model", content: fullReply }])
     } catch (err) {
@@ -269,10 +289,9 @@ export default function PositiveVibesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcript, speakQueue])
 
-  // keep sendMessageRef current so startListening always uses the latest transcript
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
 
-  // ── Mic button ──────────────────────────────────────────────────────
+  // ── Mic toggle ──────────────────────────────────────────────────────
   const handleMicToggle = useCallback(() => {
     if (voiceState === "idle") {
       autoLoopRef.current = true
@@ -309,12 +328,11 @@ export default function PositiveVibesPage() {
     }
   }, [transcript])
 
-  // ── Text input submit ────────────────────────────────────────────────
+  // ── Text submit ─────────────────────────────────────────────────────
   const handleTextSubmit = useCallback(async () => {
     const text = textInput.trim()
     if (!text || voiceState === "speaking") return
     setTextInput("")
-    // stop mic if active
     if (voiceState !== "idle") {
       autoLoopRef.current = false
       synthRef.current?.cancel()
@@ -327,17 +345,17 @@ export default function PositiveVibesPage() {
     await sendMessageRef.current(text)
   }, [textInput, voiceState, stopMic])
 
-  // ── Status label ────────────────────────────────────────────────────
+  // ── Auto-scroll transcript ──────────────────────────────────────────
+  const transcriptBottomRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    transcriptBottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [transcript])
+
   const statusLabel =
     voiceState === "listening" ? "Listening…" :
     voiceState === "speaking"  ? "Speaking…" :
     transcript.length > 0      ? "Tap to continue" :
                                  "Tap to begin"
-
-  const transcriptBottomRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    transcriptBottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [transcript])
 
   return (
     <div
@@ -380,16 +398,15 @@ export default function PositiveVibesPage() {
       {/* Split body */}
       <div className="flex-1 flex overflow-hidden">
 
-        {/* ── Left: Globe panel ── */}
+        {/* ── Left: Globe (2/3) ── */}
         <div
           className="flex flex-col items-center justify-center gap-6 shrink-0"
           style={{
-            width: "42%",
+            width: "66.666%",
             borderRight: "1px solid rgba(255,255,255,0.05)",
             padding: "24px 16px",
           }}
         >
-          {/* Quote */}
           <p
             className="text-xs italic text-center max-w-xs"
             style={{ color: "rgba(255,255,255,0.2)" }}
@@ -397,36 +414,32 @@ export default function PositiveVibesPage() {
             ✦ &ldquo;{quote.q}&rdquo; — {quote.a}
           </p>
 
-          {/* Globe */}
-          <PositiveVibesGlobe state={voiceState} audioLevel={audioLevel} size={260} />
+          <PositiveVibesGlobe state={voiceState} audioLevel={audioLevel} size={320} />
 
-          {/* Status */}
           <p className="text-xs tracking-wide" style={{ color: "rgba(255,255,255,0.4)" }}>
             {statusLabel}
           </p>
 
-          {/* Mic button */}
           <button
             onClick={handleMicToggle}
             className="flex items-center justify-center rounded-full transition-all duration-200"
             style={{
-              width: 56,
-              height: 56,
+              width: 60,
+              height: 60,
               background: voiceState !== "idle" ? "rgba(255,255,255,0.12)" : "rgba(74,124,89,0.8)",
               border: `2px solid ${voiceState !== "idle" ? "rgba(255,255,255,0.2)" : "rgba(74,124,89,0.6)"}`,
               boxShadow: voiceState !== "idle"
                 ? "0 0 16px rgba(255,255,255,0.06)"
                 : "0 0 16px rgba(74,124,89,0.3)",
             }}
-            aria-label={voiceState !== "idle" ? "Stop conversation" : "Start conversation"}
+            aria-label={voiceState !== "idle" ? "Stop" : "Start listening"}
           >
             {voiceState !== "idle"
-              ? <MicOff size={20} style={{ color: "rgba(255,255,255,0.7)" }} />
-              : <Mic size={20} style={{ color: "#fff" }} />
+              ? <MicOff size={22} style={{ color: "rgba(255,255,255,0.7)" }} />
+              : <Mic size={22} style={{ color: "#fff" }} />
             }
           </button>
 
-          {/* Error */}
           {error && (
             <p className="text-xs text-center max-w-xs" style={{ color: "#f5a623" }}>
               {error}
@@ -434,11 +447,11 @@ export default function PositiveVibesPage() {
           )}
         </div>
 
-        {/* ── Right: Transcript panel ── */}
+        {/* ── Right: Transcript (1/3) ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+          <div className="flex-1 overflow-y-auto px-4 py-5 space-y-3">
             {transcript.length === 0 && (
               <p
                 className="text-xs text-center mt-12"
@@ -450,16 +463,16 @@ export default function PositiveVibesPage() {
             {transcript.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className="max-w-[85%] px-4 py-2.5 text-sm leading-relaxed"
+                  className="max-w-[90%] px-3 py-2 text-xs leading-relaxed"
                   style={msg.role === "user" ? {
                     background: "rgba(74,124,89,0.35)",
                     border: "1px solid rgba(74,124,89,0.4)",
-                    borderRadius: "12px 12px 2px 12px",
+                    borderRadius: "10px 10px 2px 10px",
                     color: "rgba(255,255,255,0.85)",
                   } : {
                     background: "rgba(255,255,255,0.05)",
                     border: "1px solid rgba(255,255,255,0.08)",
-                    borderRadius: "2px 12px 12px 12px",
+                    borderRadius: "2px 10px 10px 10px",
                     color: "rgba(255,255,255,0.7)",
                     whiteSpace: "pre-wrap",
                   }}
@@ -468,22 +481,26 @@ export default function PositiveVibesPage() {
                 </div>
               </div>
             ))}
-            {voiceState === "speaking" && transcript.length > 0 && transcript[transcript.length - 1].role === "user" && (
+
+            {/* Typing indicator */}
+            {voiceState === "speaking" &&
+              transcript.length > 0 &&
+              transcript[transcript.length - 1].role === "user" && (
               <div className="flex justify-start">
                 <div
-                  className="px-4 py-2.5"
+                  className="px-3 py-2"
                   style={{
                     background: "rgba(255,255,255,0.05)",
                     border: "1px solid rgba(255,255,255,0.08)",
-                    borderRadius: "2px 12px 12px 12px",
+                    borderRadius: "2px 10px 10px 10px",
                   }}
                 >
                   <div className="flex gap-1 items-center">
-                    {[0, 1, 2].map((i) => (
+                    {[0, 1, 2].map((j) => (
                       <div
-                        key={i}
+                        key={j}
                         className="w-1.5 h-1.5 rounded-full animate-bounce"
-                        style={{ background: "rgba(255,255,255,0.3)", animationDelay: `${i * 0.15}s` }}
+                        style={{ background: "rgba(255,255,255,0.3)", animationDelay: `${j * 0.15}s` }}
                       />
                     ))}
                   </div>
@@ -495,7 +512,7 @@ export default function PositiveVibesPage() {
 
           {/* Input bar */}
           <div
-            className="shrink-0 px-4 py-3 flex flex-col gap-2"
+            className="shrink-0 px-3 py-3 flex flex-col gap-2"
             style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
           >
             <div className="flex items-center gap-2">
@@ -506,12 +523,12 @@ export default function PositiveVibesPage() {
                 onKeyDown={(e) => { if (e.key === "Enter") handleTextSubmit() }}
                 placeholder="Type a message…"
                 disabled={voiceState === "speaking"}
-                className="flex-1 text-sm outline-none"
+                className="flex-1 text-xs outline-none"
                 style={{
                   background: "rgba(255,255,255,0.05)",
                   border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 10,
-                  padding: "9px 14px",
+                  borderRadius: 8,
+                  padding: "8px 12px",
                   color: "rgba(255,255,255,0.8)",
                 }}
               />
@@ -519,14 +536,13 @@ export default function PositiveVibesPage() {
                 onClick={handleTextSubmit}
                 disabled={!textInput.trim() || voiceState === "speaking"}
                 className="flex items-center justify-center rounded-full shrink-0 transition-opacity disabled:opacity-30"
-                style={{ width: 38, height: 38, background: "rgba(74,124,89,0.7)" }}
+                style={{ width: 34, height: 34, background: "rgba(74,124,89,0.7)" }}
                 aria-label="Send"
               >
-                <Send size={14} style={{ color: "#fff" }} />
+                <Send size={13} style={{ color: "#fff" }} />
               </button>
             </div>
 
-            {/* Save to Docs */}
             {transcript.length > 0 && voiceState === "idle" && (
               <div className="flex justify-end">
                 {docUrl ? (
@@ -535,7 +551,7 @@ export default function PositiveVibesPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs underline"
-                    style={{ color: "rgba(255,255,255,0.35)" }}
+                    style={{ color: "rgba(255,255,255,0.3)" }}
                   >
                     Open in Google Docs ↗
                   </a>
