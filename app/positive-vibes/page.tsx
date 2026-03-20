@@ -135,7 +135,7 @@ export default function PositiveVibesPage() {
     }
 
     rec.onerror = (e) => {
-      if (e.error === "aborted" || e.error === "no-speech") {
+      if (e.error === "aborted" || e.error === "no-speech" || e.error === "network") {
         if (autoLoopRef.current && voiceStateRef.current !== "idle") startListening()
       } else {
         setError(`Mic error: ${e.error}`)
