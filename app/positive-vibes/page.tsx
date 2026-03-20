@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { ArrowLeft, Mic, MicOff, Sparkles, FileText } from "lucide-react"
+import { ArrowLeft, Mic, MicOff, Sparkles, FileText, Send } from "lucide-react"
 import PositiveVibesGlobe from "@/components/positive-vibes-globe"
 
 interface Message {
@@ -32,6 +32,7 @@ export default function PositiveVibesPage() {
   const [savingDoc, setSavingDoc] = useState(false)
   const [docUrl, setDocUrl] = useState<string | null>(null)
   const [quote, setQuote] = useState({ q: "Breathe. This too shall pass.", a: "Unknown" })
+  const [textInput, setTextInput] = useState("")
 
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const synthRef = useRef(typeof window !== "undefined" ? window.speechSynthesis : null)
@@ -313,6 +314,24 @@ export default function PositiveVibesPage() {
     }
   }, [transcript])
 
+  // ── Text input submit ────────────────────────────────────────────────
+  const handleTextSubmit = useCallback(async () => {
+    const text = textInput.trim()
+    if (!text || voiceState === "speaking") return
+    setTextInput("")
+    // stop mic if active
+    if (voiceState !== "idle") {
+      autoLoopRef.current = false
+      synthRef.current?.cancel()
+      stopMic()
+      speakingRef.current = false
+      utteranceQueueRef.current = []
+      setVoiceState("idle")
+      setAudioLevel(0)
+    }
+    await sendMessageRef.current(text)
+  }, [textInput, voiceState, stopMic])
+
   // ── Status label ────────────────────────────────────────────────────
   const statusLabel =
     voiceState === "listening" ? "Listening…" :
@@ -396,6 +415,39 @@ export default function PositiveVibesPage() {
             : <Mic size={24} style={{ color: "#fff" }} />
           }
         </button>
+
+        {/* Text input */}
+        <div className="flex items-center gap-2 w-full max-w-sm px-4">
+          <input
+            type="text"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleTextSubmit() }}
+            placeholder="Or type here…"
+            disabled={voiceState === "speaking"}
+            className="flex-1 text-sm outline-none"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10,
+              padding: "8px 14px",
+              color: "rgba(255,255,255,0.7)",
+            }}
+          />
+          <button
+            onClick={handleTextSubmit}
+            disabled={!textInput.trim() || voiceState === "speaking"}
+            className="flex items-center justify-center rounded-full shrink-0 transition-opacity disabled:opacity-30"
+            style={{
+              width: 36,
+              height: 36,
+              background: "rgba(74,124,89,0.7)",
+            }}
+            aria-label="Send"
+          >
+            <Send size={14} style={{ color: "#fff" }} />
+          </button>
+        </div>
 
         {/* Error */}
         {error && (
