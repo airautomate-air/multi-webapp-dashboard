@@ -36,9 +36,16 @@ export default function PositiveVibesPage() {
   const [quote, setQuote] = useState<Quote>(FALLBACK_QUOTE)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     setQuote(getStoredQuote())
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+    }
   }, [])
 
   useEffect(() => {
@@ -63,11 +70,17 @@ export default function PositiveVibesPage() {
 
     if (textareaRef.current) textareaRef.current.style.height = "auto"
 
+    // Cancel any previous in-flight request
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     try {
       const res = await fetch("/api/positive-vibes/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: updatedMessages }),
+        signal: controller.signal,
       })
 
       const data = await res.json()
@@ -76,6 +89,7 @@ export default function PositiveVibesPage() {
       const modelMessage: Message = { role: "model", content: data.reply }
       setMessages([...updatedMessages, modelMessage])
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return
       setError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setLoading(false)
@@ -194,7 +208,7 @@ export default function PositiveVibesPage() {
             <div
               className="px-4 py-3"
               style={{
-                background: "#ffffff",
+                background: "#f2f6f2",
                 border: "1px solid #c8d8c8",
                 borderRadius: "0 12px 12px 12px",
               }}
