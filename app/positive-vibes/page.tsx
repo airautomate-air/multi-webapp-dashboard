@@ -46,6 +46,10 @@ export default function PositiveVibesPage() {
   const voiceStateRef = useRef<VoiceState>("idle")
   // forward ref so speakNext can call itself without circular useCallback deps
   const speakNextRef = useRef<() => void>(() => {})
+  // forward ref so startListening always calls the latest sendMessage (avoids stale transcript)
+  const sendMessageRef = useRef<(text: string) => Promise<void>>(async () => {})
+  // count consecutive network errors to avoid infinite silent retries
+  const networkRetryRef = useRef(0)
 
   // keep voiceState ref in sync
   useEffect(() => { voiceStateRef.current = voiceState }, [voiceState])
@@ -91,6 +95,8 @@ export default function PositiveVibesPage() {
   }, [stopLevelTracking])
 
   const startListening = useCallback(async () => {
+    // Clean up any previous mic resources before opening new ones
+    stopMic()
     setError(null)
     setVoiceState("listening")
 
@@ -129,14 +135,26 @@ export default function PositiveVibesPage() {
 
     rec.onresult = async (e) => {
       const text = e.results[0]?.[0]?.transcript?.trim() ?? ""
+      networkRetryRef.current = 0
       if (!text) { startListening(); return }
       stopMic()
-      await sendMessage(text)
+      await sendMessageRef.current(text)
     }
 
     rec.onerror = (e) => {
-      if (e.error === "aborted" || e.error === "no-speech" || e.error === "network") {
+      if (e.error === "aborted" || e.error === "no-speech") {
+        networkRetryRef.current = 0
         if (autoLoopRef.current && voiceStateRef.current !== "idle") startListening()
+      } else if (e.error === "network") {
+        networkRetryRef.current++
+        if (networkRetryRef.current >= 3) {
+          networkRetryRef.current = 0
+          setError("Can't reach speech service. Check your internet and tap the mic to try again.")
+          setVoiceState("idle")
+          stopMic()
+        } else if (autoLoopRef.current && voiceStateRef.current !== "idle") {
+          startListening()
+        }
       } else {
         setError(`Mic error: ${e.error}`)
         setVoiceState("idle")
@@ -238,6 +256,9 @@ export default function PositiveVibesPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcript, speakQueue])
+
+  // keep sendMessageRef current so startListening always uses the latest transcript
+  useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
 
   // ── Mic button ──────────────────────────────────────────────────────
   const handleMicToggle = useCallback(() => {
