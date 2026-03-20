@@ -15,7 +15,6 @@ interface Point {
   x: number
   y: number
   z: number
-  depth: number
 }
 
 function buildPoints(n: number): Point[] {
@@ -29,7 +28,6 @@ function buildPoints(n: number): Point[] {
       x: Math.sin(lat) * Math.cos(lon),
       y: Math.cos(lat),
       z: Math.sin(lat) * Math.sin(lon),
-      depth: 0,
     })
   }
   return pts
@@ -41,7 +39,29 @@ export default function PositiveVibesGlobe({ state, audioLevel, size = 340 }: Gl
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rippleRef = useRef(0)
   const phaseRef = useRef(0)
-  const rafRef = useRef<number>(0)
+  const rafRef = useRef<number | null>(null)
+
+  // Keep live values in refs so draw() never needs to close over changing props
+  const stateRef = useRef(state)
+  const audioLevelRef = useRef(audioLevel)
+  const sizeRef = useRef(size)
+  stateRef.current = state
+  audioLevelRef.current = audioLevel
+  sizeRef.current = size
+
+  // Resize canvas (and reset context transform) only when size changes
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = sizeRef.current * dpr
+    canvas.height = sizeRef.current * dpr
+    const ctx = canvas.getContext("2d")
+    if (ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0) // reset before scaling
+      ctx.scale(dpr, dpr)
+    }
+  }, [size])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -49,17 +69,20 @@ export default function PositiveVibesGlobe({ state, audioLevel, size = 340 }: Gl
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
+    const s = stateRef.current
+    const al = audioLevelRef.current
+    const sz = sizeRef.current
     const dpr = window.devicePixelRatio || 1
     const w = canvas.width / dpr
     const h = canvas.height / dpr
     const cx = w / 2
     const cy = h / 2
-    const R = size / 2 - 12
+    const R = sz / 2 - 12
 
-    // lerp ripple
+    // lerp ripple toward target
     const target =
-      state === "speaking" ? audioLevel * 0.85 :
-      state === "listening" ? 0.22 : 0
+      s === "speaking" ? al * 0.85 :
+      s === "listening" ? 0.22 : 0
     rippleRef.current += (target - rippleRef.current) * 0.06
     const ripple = rippleRef.current
     phaseRef.current += 0.018
@@ -68,37 +91,34 @@ export default function PositiveVibesGlobe({ state, audioLevel, size = 340 }: Gl
 
     // background glow
     const glowColor =
-      state === "listening" ? "rgba(30,80,180,0.18)" :
-      state === "speaking"  ? "rgba(200,170,0,0.18)" :
-                              "rgba(60,140,80,0.15)"
+      s === "listening" ? "rgba(30,80,180,0.18)" :
+      s === "speaking"  ? "rgba(200,170,0,0.18)" :
+                          "rgba(60,140,80,0.15)"
     const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.2)
     grd.addColorStop(0, glowColor)
     grd.addColorStop(1, "transparent")
     ctx.fillStyle = grd
     ctx.fillRect(0, 0, w, h)
 
-    // rotate slowly
     const rot = phaseRef.current * 0.3
+    const cosR = Math.cos(rot)
+    const sinR = Math.sin(rot)
 
-    const projected: Array<{ sx: number; sy: number; depth: number; lat: number }> = []
+    const projected: Array<{ sx: number; sy: number; depth: number }> = []
     for (const p of BASE_POINTS) {
-      // apply ripple displacement
       const disp = ripple > 0.01
         ? Math.sin(p.lat * 5 + phaseRef.current) * Math.sin(p.lon * 3 + phaseRef.current * 0.7) * ripple
         : 0
       const r = 1 + disp
 
-      // y-axis rotation
-      const cosR = Math.cos(rot), sinR = Math.sin(rot)
       const rx = p.x * cosR - p.z * sinR
       const ry = p.y
       const rz = p.x * sinR + p.z * cosR
 
-      const depth = (rz + 1) / 2  // 0=back, 1=front
-      projected.push({ sx: cx + rx * R * r, sy: cy - ry * R * r, depth, lat: p.lat })
+      const depth = (rz + 1) / 2
+      projected.push({ sx: cx + rx * R * r, sy: cy - ry * R * r, depth })
     }
 
-    // sort back to front
     projected.sort((a, b) => a.depth - b.depth)
 
     for (const p of projected) {
@@ -106,16 +126,15 @@ export default function PositiveVibesGlobe({ state, audioLevel, size = 340 }: Gl
       const alpha = 0.25 + d * 0.75
 
       let rr: number, gg: number, bb: number
-      if (state === "listening") {
+      if (s === "listening") {
         rr = Math.round(20 + d * 60)
         gg = Math.round(110 + d * 100)
         bb = Math.round(180 + d * 60)
-      } else if (state === "speaking") {
+      } else if (s === "speaking") {
         rr = Math.round(200 + d * 40)
         gg = Math.round(180 + d * 50)
         bb = Math.round(20 + d * 40)
       } else {
-        // idle — green
         rr = Math.round(60 + d * 80)
         gg = Math.round(160 + d * 60)
         bb = Math.round(80 + d * 60)
@@ -129,19 +148,15 @@ export default function PositiveVibesGlobe({ state, audioLevel, size = 340 }: Gl
     }
 
     rafRef.current = requestAnimationFrame(draw)
-  }, [state, audioLevel, size])
+  }, []) // stable — reads live values via refs
 
+  // Start/stop animation loop once (mount/unmount only)
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = size * dpr
-    canvas.height = size * dpr
-    const ctx = canvas.getContext("2d")
-    ctx?.scale(dpr, dpr)
     rafRef.current = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [draw, size])
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    }
+  }, [draw])
 
   return (
     <canvas
