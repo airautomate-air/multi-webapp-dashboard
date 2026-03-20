@@ -163,15 +163,10 @@ export default function PositiveVibesPage() {
         networkRetryRef.current = 0
         if (autoLoopRef.current && voiceStateRef.current !== "idle") startListening()
       } else if (e.error === "network") {
-        networkRetryRef.current++
-        if (networkRetryRef.current >= 3) {
-          networkRetryRef.current = 0
-          setError("Can't reach speech service. Check your internet and tap the mic to try again.")
-          setVoiceState("idle")
-          stopMic()
-        } else if (autoLoopRef.current && voiceStateRef.current !== "idle") {
-          startListening()
-        }
+        // Network errors mean Chrome can't reach Google's STT servers — silently go idle
+        networkRetryRef.current = 0
+        setVoiceState("idle")
+        stopMic()
       } else {
         setError(`Mic error: ${e.error}`)
         setVoiceState("idle")
@@ -339,6 +334,11 @@ export default function PositiveVibesPage() {
     transcript.length > 0      ? "Tap to continue" :
                                  "Tap to begin"
 
+  const transcriptBottomRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    transcriptBottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [transcript])
+
   return (
     <div
       className="flex flex-col h-screen"
@@ -377,118 +377,183 @@ export default function PositiveVibesPage() {
         </span>
       </header>
 
-      {/* Globe area */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-8">
-        {/* Quote */}
-        <p
-          className="text-xs italic text-center px-8 max-w-sm"
-          style={{ color: "rgba(255,255,255,0.25)" }}
-        >
-          ✦ &ldquo;{quote.q}&rdquo; — {quote.a}
-        </p>
+      {/* Split body */}
+      <div className="flex-1 flex overflow-hidden">
 
-        {/* Globe */}
-        <PositiveVibesGlobe state={voiceState} audioLevel={audioLevel} size={320} />
-
-        {/* Status */}
-        <p className="text-sm tracking-wide" style={{ color: "rgba(255,255,255,0.45)" }}>
-          {statusLabel}
-        </p>
-
-        {/* Mic button */}
-        <button
-          onClick={handleMicToggle}
-          className="flex items-center justify-center rounded-full transition-all duration-200"
+        {/* ── Left: Globe panel ── */}
+        <div
+          className="flex flex-col items-center justify-center gap-6 shrink-0"
           style={{
-            width: 64,
-            height: 64,
-            background: voiceState !== "idle" ? "rgba(255,255,255,0.12)" : "rgba(74,124,89,0.8)",
-            border: `2px solid ${voiceState !== "idle" ? "rgba(255,255,255,0.2)" : "rgba(74,124,89,0.6)"}`,
-            boxShadow: voiceState !== "idle"
-              ? "0 0 20px rgba(255,255,255,0.08)"
-              : "0 0 20px rgba(74,124,89,0.3)",
+            width: "42%",
+            borderRight: "1px solid rgba(255,255,255,0.05)",
+            padding: "24px 16px",
           }}
-          aria-label={voiceState !== "idle" ? "Stop conversation" : "Start conversation"}
         >
-          {voiceState !== "idle"
-            ? <MicOff size={24} style={{ color: "rgba(255,255,255,0.7)" }} />
-            : <Mic size={24} style={{ color: "#fff" }} />
-          }
-        </button>
-
-        {/* Text input */}
-        <div className="flex items-center gap-2 w-full max-w-sm px-4">
-          <input
-            type="text"
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleTextSubmit() }}
-            placeholder="Or type here…"
-            disabled={voiceState === "speaking"}
-            className="flex-1 text-sm outline-none"
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 10,
-              padding: "8px 14px",
-              color: "rgba(255,255,255,0.7)",
-            }}
-          />
-          <button
-            onClick={handleTextSubmit}
-            disabled={!textInput.trim() || voiceState === "speaking"}
-            className="flex items-center justify-center rounded-full shrink-0 transition-opacity disabled:opacity-30"
-            style={{
-              width: 36,
-              height: 36,
-              background: "rgba(74,124,89,0.7)",
-            }}
-            aria-label="Send"
+          {/* Quote */}
+          <p
+            className="text-xs italic text-center max-w-xs"
+            style={{ color: "rgba(255,255,255,0.2)" }}
           >
-            <Send size={14} style={{ color: "#fff" }} />
+            ✦ &ldquo;{quote.q}&rdquo; — {quote.a}
+          </p>
+
+          {/* Globe */}
+          <PositiveVibesGlobe state={voiceState} audioLevel={audioLevel} size={260} />
+
+          {/* Status */}
+          <p className="text-xs tracking-wide" style={{ color: "rgba(255,255,255,0.4)" }}>
+            {statusLabel}
+          </p>
+
+          {/* Mic button */}
+          <button
+            onClick={handleMicToggle}
+            className="flex items-center justify-center rounded-full transition-all duration-200"
+            style={{
+              width: 56,
+              height: 56,
+              background: voiceState !== "idle" ? "rgba(255,255,255,0.12)" : "rgba(74,124,89,0.8)",
+              border: `2px solid ${voiceState !== "idle" ? "rgba(255,255,255,0.2)" : "rgba(74,124,89,0.6)"}`,
+              boxShadow: voiceState !== "idle"
+                ? "0 0 16px rgba(255,255,255,0.06)"
+                : "0 0 16px rgba(74,124,89,0.3)",
+            }}
+            aria-label={voiceState !== "idle" ? "Stop conversation" : "Start conversation"}
+          >
+            {voiceState !== "idle"
+              ? <MicOff size={20} style={{ color: "rgba(255,255,255,0.7)" }} />
+              : <Mic size={20} style={{ color: "#fff" }} />
+            }
           </button>
+
+          {/* Error */}
+          {error && (
+            <p className="text-xs text-center max-w-xs" style={{ color: "#f5a623" }}>
+              {error}
+            </p>
+          )}
         </div>
 
-        {/* Error */}
-        {error && (
-          <p
-            className="text-xs text-center px-8 max-w-xs"
-            style={{ color: "#f5a623" }}
-          >
-            {error}
-          </p>
-        )}
+        {/* ── Right: Transcript panel ── */}
+        <div className="flex-1 flex flex-col overflow-hidden">
 
-        {/* Save to Docs */}
-        {transcript.length > 0 && voiceState === "idle" && (
-          <div className="flex flex-col items-center gap-2">
-            {docUrl ? (
-              <a
-                href={docUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs underline"
-                style={{ color: "rgba(255,255,255,0.4)" }}
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+            {transcript.length === 0 && (
+              <p
+                className="text-xs text-center mt-12"
+                style={{ color: "rgba(255,255,255,0.2)" }}
               >
-                Open in Google Docs ↗
-              </a>
-            ) : (
-              <button
-                onClick={handleSave}
-                disabled={savingDoc}
-                className="flex items-center gap-2 text-xs px-4 py-2 rounded-full transition-opacity disabled:opacity-40"
+                Your conversation will appear here.
+              </p>
+            )}
+            {transcript.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div
+                  className="max-w-[85%] px-4 py-2.5 text-sm leading-relaxed"
+                  style={msg.role === "user" ? {
+                    background: "rgba(74,124,89,0.35)",
+                    border: "1px solid rgba(74,124,89,0.4)",
+                    borderRadius: "12px 12px 2px 12px",
+                    color: "rgba(255,255,255,0.85)",
+                  } : {
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "2px 12px 12px 12px",
+                    color: "rgba(255,255,255,0.7)",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            {voiceState === "speaking" && transcript.length > 0 && transcript[transcript.length - 1].role === "user" && (
+              <div className="flex justify-start">
+                <div
+                  className="px-4 py-2.5"
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "2px 12px 12px 12px",
+                  }}
+                >
+                  <div className="flex gap-1 items-center">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-full animate-bounce"
+                        style={{ background: "rgba(255,255,255,0.3)", animationDelay: `${i * 0.15}s` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={transcriptBottomRef} />
+          </div>
+
+          {/* Input bar */}
+          <div
+            className="shrink-0 px-4 py-3 flex flex-col gap-2"
+            style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleTextSubmit() }}
+                placeholder="Type a message…"
+                disabled={voiceState === "speaking"}
+                className="flex-1 text-sm outline-none"
                 style={{
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  color: "rgba(255,255,255,0.5)",
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 10,
+                  padding: "9px 14px",
+                  color: "rgba(255,255,255,0.8)",
                 }}
+              />
+              <button
+                onClick={handleTextSubmit}
+                disabled={!textInput.trim() || voiceState === "speaking"}
+                className="flex items-center justify-center rounded-full shrink-0 transition-opacity disabled:opacity-30"
+                style={{ width: 38, height: 38, background: "rgba(74,124,89,0.7)" }}
+                aria-label="Send"
               >
-                <FileText size={13} />
-                {savingDoc ? "Saving…" : "Save to Google Docs"}
+                <Send size={14} style={{ color: "#fff" }} />
               </button>
+            </div>
+
+            {/* Save to Docs */}
+            {transcript.length > 0 && voiceState === "idle" && (
+              <div className="flex justify-end">
+                {docUrl ? (
+                  <a
+                    href={docUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs underline"
+                    style={{ color: "rgba(255,255,255,0.35)" }}
+                  >
+                    Open in Google Docs ↗
+                  </a>
+                ) : (
+                  <button
+                    onClick={handleSave}
+                    disabled={savingDoc}
+                    className="flex items-center gap-1.5 text-xs transition-opacity disabled:opacity-40"
+                    style={{ color: "rgba(255,255,255,0.3)" }}
+                  >
+                    <FileText size={11} />
+                    {savingDoc ? "Saving…" : "Save to Google Docs"}
+                  </button>
+                )}
+              </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
