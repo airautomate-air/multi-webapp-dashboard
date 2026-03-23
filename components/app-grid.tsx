@@ -89,7 +89,7 @@ export default function AppGrid({ isSignedIn }: { isSignedIn: boolean }) {
           <GlowCard
             customSize
             glowColor={app.glowColor}
-            className="w-full h-64 transition-transform duration-300 group-hover:-translate-y-1"
+            className="w-full h-64 overflow-hidden transition-transform duration-300 group-hover:-translate-y-1"
           >
             <div className="flex flex-col h-full justify-between relative z-10">
               <div className="p-1">
