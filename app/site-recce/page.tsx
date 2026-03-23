@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { SiteEntry, createEmptySite } from "./types"
-import { loadSites, upsertSite } from "./storage"
+import { loadSites, upsertSite, deleteSite } from "./storage"
 import SiteList from "./components/SiteList"
 import Wizard from "./components/Wizard"
 import SiteDetail from "./components/SiteDetail"
@@ -39,6 +39,12 @@ export default function SiteReccePage() {
     upsertSite(site)
     refreshSites()
     setView({ kind: "detail", site })
+  }
+
+  function handleDelete(id: string) {
+    deleteSite(id)
+    setSites(loadSites())
+    setView({ kind: "list" })
   }
 
   function handleUpdate(updated: SiteEntry) {
@@ -103,6 +109,7 @@ export default function SiteReccePage() {
             onBack={() => setView({ kind: "list" })}
             onEdit={site => setView({ kind: "wizard", site })}
             onUpdate={handleUpdate}
+            onDelete={handleDelete}
           />
         )}
       </main>

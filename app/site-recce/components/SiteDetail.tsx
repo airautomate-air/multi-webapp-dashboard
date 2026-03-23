@@ -4,13 +4,14 @@
 import { useState } from "react"
 import { SiteEntry } from "../types"
 import MediaTab from "./MediaTab"
-import { ArrowLeft, ExternalLink, MapPin, Pencil } from "lucide-react"
+import { ArrowLeft, ExternalLink, MapPin, Pencil, Trash2 } from "lucide-react"
 
 interface Props {
   site: SiteEntry
   onBack: () => void
   onEdit: (site: SiteEntry) => void
   onUpdate: (site: SiteEntry) => void
+  onDelete: (id: string) => void
 }
 
 const TABS = ["Land", "Legal", "Surroundings", "Financials", "📷 Media"] as const
@@ -25,7 +26,7 @@ function Row({ label, value }: { label: string; value: string | number | null | 
   )
 }
 
-export default function SiteDetail({ site, onBack, onEdit, onUpdate }: Props) {
+export default function SiteDetail({ site, onBack, onEdit, onUpdate, onDelete }: Props) {
   const [tab, setTab] = useState(0)
 
   const pricePerSqm = site.askingPriceVnd && site.areaSqm
@@ -47,13 +48,26 @@ export default function SiteDetail({ site, onBack, onEdit, onUpdate }: Props) {
         >
           <ArrowLeft size={16} /> All Sites
         </button>
-        <button
-          type="button"
-          onClick={() => onEdit(site)}
-          className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-800 transition-colors min-h-[44px] px-1"
-        >
-          <Pencil size={13} /> Edit
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onEdit(site)}
+            className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-800 transition-colors min-h-[44px] px-2"
+          >
+            <Pencil size={13} /> Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm(`Delete "${site.name || "this site"}"? This cannot be undone.`)) {
+                onDelete(site.id)
+              }
+            }}
+            className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 transition-colors min-h-[44px] px-2"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
 
       {/* Site title + actions */}
