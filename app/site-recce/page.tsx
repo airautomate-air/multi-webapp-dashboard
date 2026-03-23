@@ -41,10 +41,12 @@ export default function SiteReccePage() {
     setView({ kind: "detail", site })
   }
 
-  function handleUpdate(site: SiteEntry) {
-    upsertSite(site)
-    refreshSites()
-    if (view.kind === "detail") setView({ kind: "detail", site })
+  function handleUpdate(updated: SiteEntry) {
+    upsertSite(updated)
+    const freshList = loadSites()
+    setSites(freshList)
+    const canonical = freshList.find(s => s.id === updated.id) ?? updated
+    setView({ kind: "detail", site: canonical })
   }
 
   const pageTitle =

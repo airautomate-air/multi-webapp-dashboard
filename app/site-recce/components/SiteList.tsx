@@ -15,7 +15,7 @@ function badge(label: string, done: boolean, partial?: boolean) {
     ? "bg-yellow-100 text-yellow-700"
     : "bg-stone-100 text-stone-400"
   return (
-    <span key={label} className={`text-[10px] px-2 py-0.5 rounded-full ${color}`}>
+    <span className={`text-[10px] px-2 py-0.5 rounded-full ${color}`}>
       {label}{done ? " ✓" : ""}
     </span>
   )
@@ -43,8 +43,9 @@ export default function SiteList({ sites, onSelect, onNew }: Props) {
       {sites.map(site => (
         <button
           key={site.id}
+          type="button"
           onClick={() => onSelect(site)}
-          className="w-full text-left border border-stone-200 rounded-xl p-4 bg-white hover:border-stone-300 hover:shadow-sm transition-all"
+          className="w-full text-left border border-stone-200 rounded-xl p-4 bg-white hover:border-stone-300 hover:shadow-sm transition-all min-h-[44px]"
         >
           <div className="flex items-start justify-between">
             <div>
@@ -69,8 +70,9 @@ export default function SiteList({ sites, onSelect, onNew }: Props) {
         </button>
       ))}
       <button
+        type="button"
         onClick={onNew}
-        className="w-full border-2 border-dashed border-stone-200 rounded-xl p-4 text-stone-400 hover:border-stone-300 hover:text-stone-500 transition-colors text-sm"
+        className="w-full border-2 border-dashed border-stone-200 rounded-xl p-4 text-stone-400 hover:border-stone-300 hover:text-stone-500 transition-colors text-sm min-h-[44px]"
       >
         + Add new site
       </button>

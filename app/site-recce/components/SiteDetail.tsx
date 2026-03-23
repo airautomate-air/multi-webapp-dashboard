@@ -16,7 +16,7 @@ interface Props {
 const TABS = ["Land", "Legal", "Surroundings", "Financials", "📷 Media"] as const
 
 function Row({ label, value }: { label: string; value: string | number | null | undefined }) {
-  if (!value) return null
+  if (value === null || value === undefined || value === "") return null
   return (
     <div className="flex justify-between text-sm py-1.5 border-b border-stone-100">
       <span className="text-stone-500">{label}</span>
@@ -41,14 +41,16 @@ export default function SiteDetail({ site, onBack, onEdit, onUpdate }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <button
+          type="button"
           onClick={onBack}
-          className="flex items-center gap-1 text-sm text-stone-500 hover:text-stone-800 transition-colors"
+          className="flex items-center gap-1 text-sm text-stone-500 hover:text-stone-800 transition-colors min-h-[44px] px-1"
         >
           <ArrowLeft size={16} /> All Sites
         </button>
         <button
+          type="button"
           onClick={() => onEdit(site)}
-          className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-800 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-800 transition-colors min-h-[44px] px-1"
         >
           <Pencil size={13} /> Edit
         </button>
@@ -69,14 +71,16 @@ export default function SiteDetail({ site, onBack, onEdit, onUpdate }: Props) {
           <p className="text-xs text-stone-400 mt-0.5">{site.areaSqm} m²</p>
         )}
         <div className="flex items-center gap-2 mt-3 flex-wrap">
-          <a
-            href={mapsUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 px-3 py-1.5 rounded-lg transition-colors"
-          >
-            <MapPin size={12} /> Open in Maps
-          </a>
+          {((site.lat && site.lng) || site.address) && (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 px-3 py-1.5 rounded-lg transition-colors min-h-[44px]"
+            >
+              <MapPin size={12} /> Open in Maps
+            </a>
+          )}
           {site.pdfDriveUrl && (
             <a
               href={site.pdfDriveUrl}
@@ -95,8 +99,9 @@ export default function SiteDetail({ site, onBack, onEdit, onUpdate }: Props) {
         {TABS.map((t, i) => (
           <button
             key={t}
+            type="button"
             onClick={() => setTab(i)}
-            className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors
+            className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors min-h-[44px]
               ${i === tab
                 ? "border-b-2 border-stone-900 text-stone-900"
                 : "text-stone-400 hover:text-stone-600"
