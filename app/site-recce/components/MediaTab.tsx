@@ -75,29 +75,30 @@ export default function MediaTab({ site, onUpdate }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-3 gap-2">
-        {site.mediaFiles.map(m => (
-          <div key={m.localId} className="relative aspect-square rounded-lg bg-stone-100 overflow-hidden">
-            {m.status === "pending" && (
-              <div className="absolute inset-0 flex items-center justify-center bg-stone-100">
-                <Loader2 size={20} className="animate-spin text-stone-400" />
-              </div>
-            )}
-            {m.status === "error" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-50 gap-1">
-                <AlertCircle size={20} className="text-red-400" />
-                <span className="text-[10px] text-red-400">Failed</span>
-              </div>
-            )}
-            {m.status === "uploaded" && m.driveUrl && (
-              <a href={m.driveUrl} target="_blank" rel="noreferrer" className="absolute inset-0 flex items-center justify-center text-3xl">
-                {m.type === "video" ? "🎬" : "🖼️"}
-              </a>
-            )}
-          </div>
-        ))}
-        <div className="aspect-square rounded-lg border-2 border-dashed border-stone-200 flex items-center justify-center text-stone-300 text-2xl">+</div>
-      </div>
+      {site.mediaFiles.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {site.mediaFiles.map(m => (
+            <div key={m.localId} className="relative aspect-square rounded-lg bg-stone-100 overflow-hidden">
+              {m.status === "pending" && (
+                <div className="absolute inset-0 flex items-center justify-center bg-stone-100">
+                  <Loader2 size={20} className="animate-spin text-stone-400" />
+                </div>
+              )}
+              {m.status === "error" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-50 gap-1">
+                  <AlertCircle size={20} className="text-red-400" />
+                  <span className="text-[10px] text-red-400">Failed</span>
+                </div>
+              )}
+              {m.status === "uploaded" && m.driveUrl && (
+                <a href={m.driveUrl} target="_blank" rel="noreferrer" className="absolute inset-0 flex items-center justify-center text-3xl">
+                  {m.type === "video" ? "🎬" : "🖼️"}
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex gap-2">
         <button onClick={() => photoRef.current?.click()}

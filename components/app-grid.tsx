@@ -2,7 +2,7 @@
 
 import React from "react"
 import { GlowCard } from "@/components/ui/spotlight-card"
-import { FileText, BookOpen, Mic, Wand2, Brain, Sparkles } from "lucide-react"
+import { FileText, BookOpen, Mic, Wand2, Brain, Sparkles, MapPin } from "lucide-react"
 import Link from "next/link"
 import QuoteDisplay from "@/components/quote-display"
 
@@ -63,6 +63,13 @@ const apps: App[] = [
     description: "Your daily dose of calm and inspiration.",
     glowColor: "green" as const,
     renderContent: () => <QuoteDisplay />,
+  },
+  {
+    href: "/site-recce",
+    icon: MapPin,
+    title: "Site Recce",
+    description: "Evaluate real estate sites in Vietnam. Capture notes, photos, voice memos, and export reports.",
+    glowColor: "green" as const,
   },
 ]
 
