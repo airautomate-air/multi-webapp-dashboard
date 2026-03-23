@@ -1,7 +1,7 @@
 // app/site-recce/components/Wizard.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { SiteEntry, AMENITY_OPTIONS } from "../types"
 import { upsertSite } from "../storage"
 import VoiceNote from "./VoiceNote"
@@ -16,27 +16,51 @@ interface Props {
 
 const STEPS = ["Land", "Legal", "Surroundings", "Financials", "Review"]
 
+function parsePositiveNumber(value: string): number | null {
+  const n = Number(value)
+  return value && isFinite(n) && n > 0 ? n : null
+}
+
 export default function Wizard({ initial, onDone, onCancel }: Props) {
   const [step, setStep] = useState(0)
   const [site, setSite] = useState<SiteEntry>(initial)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [toast, setToast] = useState("")
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
+  }, [])
+
+  // Functional updater to avoid stale closures on rapid updates (e.g. voice + GPS)
   function update(patch: Partial<SiteEntry>) {
-    const updated = { ...site, ...patch, updatedAt: new Date().toISOString() }
-    setSite(updated)
-    upsertSite(updated)
+    setSite(prev => {
+      const next = { ...prev, ...patch, updatedAt: new Date().toISOString() }
+      upsertSite(next)
+      return next
+    })
   }
 
   function appendNote(field: keyof SiteEntry, text: string) {
-    const existing = (site[field] as string) || ""
-    update({ [field]: existing ? existing + " " + text : text } as Partial<SiteEntry>)
+    setSite(prev => {
+      const existing = (prev[field] as string) || ""
+      const next = {
+        ...prev,
+        [field]: existing ? existing + " " + text : text,
+        updatedAt: new Date().toISOString(),
+      }
+      upsertSite(next)
+      return next
+    })
   }
 
   function showToast(msg: string) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToast(msg)
-    setTimeout(() => setToast(""), 3000)
+    toastTimerRef.current = setTimeout(() => setToast(""), 3000)
   }
 
   async function saveToSheets() {
@@ -49,11 +73,14 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      const updated = { ...site, savedToSheets: true, sheetsUrl: data.sheetsUrl, updatedAt: new Date().toISOString() }
-      setSite(updated)
-      upsertSite(updated)
+      setSite(prev => {
+        const next = { ...prev, savedToSheets: true, sheetsUrl: data.sheetsUrl, updatedAt: new Date().toISOString() }
+        upsertSite(next)
+        return next
+      })
       showToast("Saved to Sheets ✓")
-    } catch {
+    } catch (err) {
+      console.error("Save to Sheets error:", err)
       showToast("Failed to save to Sheets. Data is safe locally.")
     } finally {
       setSaving(false)
@@ -70,11 +97,14 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      const updated = { ...site, pdfDriveUrl: data.pdfDriveUrl, updatedAt: new Date().toISOString() }
-      setSite(updated)
-      upsertSite(updated)
+      setSite(prev => {
+        const next = { ...prev, pdfDriveUrl: data.pdfDriveUrl, updatedAt: new Date().toISOString() }
+        upsertSite(next)
+        return next
+      })
       showToast("PDF exported to Drive ✓")
-    } catch {
+    } catch (err) {
+      console.error("PDF export error:", err)
       showToast("Export failed. Try again.")
     } finally {
       setExporting(false)
@@ -111,7 +141,8 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
               <GpsButton onLocation={(address, lat, lng) => update({ address, lat, lng })} />
             </div>
             <div className="flex gap-2">
-              <input className={inputCls} placeholder="Area (m²)" type="number" value={site.areaSqm ?? ""} onChange={e => update({ areaSqm: e.target.value ? Number(e.target.value) : null })} />
+              <input className={inputCls} placeholder="Area (m²)" type="number" min="0" value={site.areaSqm ?? ""}
+                onChange={e => update({ areaSqm: parsePositiveNumber(e.target.value) })} />
               <input className={inputCls} placeholder="Shape / Frontage" value={site.shapeFrontage} onChange={e => update({ shapeFrontage: e.target.value })} />
             </div>
             <select className={selectCls} value={site.terrain} onChange={e => update({ terrain: e.target.value as SiteEntry["terrain"] })}>
@@ -177,10 +208,13 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
               <p className="text-xs text-stone-500 mb-1.5">Nearby Amenities</p>
               <div className="flex flex-wrap gap-2">
                 {(AMENITY_OPTIONS as readonly string[]).map(a => (
-                  <label key={a} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <label key={a} className="flex items-center gap-1.5 text-sm cursor-pointer min-h-[44px] py-1">
                     <input type="checkbox"
                       checked={site.nearbyAmenities.includes(a as typeof site.nearbyAmenities[number])}
-                      onChange={e => update({ nearbyAmenities: e.target.checked ? [...site.nearbyAmenities, a as typeof site.nearbyAmenities[number]] : site.nearbyAmenities.filter(x => x !== a) })}
+                      onChange={e => update({ nearbyAmenities: e.target.checked
+                        ? [...site.nearbyAmenities, a as typeof site.nearbyAmenities[number]]
+                        : site.nearbyAmenities.filter(x => x !== a)
+                      })}
                     />
                     {a.charAt(0).toUpperCase() + a.slice(1)}
                   </label>
@@ -203,17 +237,25 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
         {step === 3 && (
           <div className="flex flex-col gap-3">
             <h2 className="font-semibold text-stone-800">Financials</h2>
-            <input className={inputCls} placeholder="Asking Price (VND)" type="number" value={site.askingPriceVnd ?? ""} onChange={e => update({ askingPriceVnd: e.target.value ? Number(e.target.value) : null })} />
+            <input className={inputCls} placeholder="Asking Price (VND)" type="number" min="0" value={site.askingPriceVnd ?? ""}
+              onChange={e => update({ askingPriceVnd: parsePositiveNumber(e.target.value) })} />
             {site.askingPriceVnd && site.areaSqm && (
               <p className="text-xs text-stone-500">Price/m²: {Math.round(site.askingPriceVnd / site.areaSqm).toLocaleString()} VND</p>
             )}
-            <input className={inputCls} placeholder="Est. Development Cost (VND, optional)" type="number" value={site.estDevelopmentCostVnd ?? ""} onChange={e => update({ estDevelopmentCostVnd: e.target.value ? Number(e.target.value) : null })} />
+            <input className={inputCls} placeholder="Est. Development Cost (VND, optional)" type="number" min="0" value={site.estDevelopmentCostVnd ?? ""}
+              onChange={e => update({ estDevelopmentCostVnd: parsePositiveNumber(e.target.value) })} />
             <div>
               <p className="text-xs text-stone-500 mb-1.5">Rating</p>
               <div className="flex gap-1">
                 {[1, 2, 3, 4, 5].map(n => (
-                  <button key={n} type="button" onClick={() => update({ rating: n as SiteEntry["rating"] })}
-                    className={`text-2xl ${n <= (site.rating ?? 0) ? "text-yellow-400" : "text-stone-200"}`}>
+                  <button
+                    key={n}
+                    type="button"
+                    aria-label={`Rate ${n} out of 5`}
+                    aria-pressed={n === (site.rating ?? 0)}
+                    onClick={() => update({ rating: n as SiteEntry["rating"] })}
+                    className={`text-2xl min-w-[44px] min-h-[44px] flex items-center justify-center ${n <= (site.rating ?? 0) ? "text-yellow-400" : "text-stone-200"}`}
+                  >
                     ★
                   </button>
                 ))}
@@ -233,7 +275,7 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
               </div>
             )}
             <div className="text-sm space-y-1 text-stone-600">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mt-1">Land & Physical</p>
+              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mt-1">Land &amp; Physical</p>
               <p><strong>Name:</strong> {site.name}</p>
               {site.address && <p><strong>Address:</strong> {site.address}</p>}
               {site.areaSqm && <p><strong>Area:</strong> {site.areaSqm} m²</p>}
@@ -242,7 +284,7 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
               {site.floodRisk && <p><strong>Flood Risk:</strong> {site.floodRisk}</p>}
               {site.landNotes && <p><strong>Land Notes:</strong> {site.landNotes}</p>}
 
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mt-3">Legal & Planning</p>
+              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mt-3">Legal &amp; Planning</p>
               {site.titleType && <p><strong>Title Type:</strong> {site.titleType}</p>}
               {site.zoning && <p><strong>Zoning:</strong> {site.zoning}</p>}
               {site.ownershipStatus && <p><strong>Ownership:</strong> {site.ownershipStatus}</p>}
@@ -269,11 +311,11 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
               <p><strong>Uploaded files:</strong> {site.mediaFiles.filter(f => f.status === "uploaded").length}</p>
             </div>
             <div className="flex flex-col gap-2">
-              <button onClick={saveToSheets} disabled={saving}
+              <button type="button" onClick={saveToSheets} disabled={saving}
                 className="flex items-center justify-center gap-2 bg-stone-900 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
                 {saving ? <><Loader2 size={15} className="animate-spin" /> Saving...</> : <><CheckCircle size={15} /> Save to Sheets</>}
               </button>
-              <button onClick={exportPdf} disabled={exporting}
+              <button type="button" onClick={exportPdf} disabled={exporting}
                 className="flex items-center justify-center gap-2 bg-stone-100 text-stone-800 rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
                 {exporting ? <><Loader2 size={15} className="animate-spin" /> Exporting...</> : "Export PDF to Drive"}
               </button>
@@ -289,26 +331,39 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
 
       {/* Navigation */}
       <div className="flex items-center justify-between pt-4 border-t border-stone-100">
-        <button onClick={step === 0 ? onCancel : () => setStep(s => s - 1)}
-          className="flex items-center gap-1 text-sm text-stone-500 hover:text-stone-800">
+        <button
+          type="button"
+          onClick={step === 0 ? onCancel : () => setStep(s => s - 1)}
+          className="flex items-center gap-1 text-sm text-stone-500 hover:text-stone-800 min-h-[44px] px-2"
+        >
           <ChevronLeft size={16} /> {step === 0 ? "Cancel" : "Back"}
         </button>
         {step < 4 ? (
-          <button onClick={() => setStep(s => s + 1)}
+          <button
+            type="button"
+            onClick={() => setStep(s => s + 1)}
             disabled={step === 0 && !site.name}
-            className="flex items-center gap-1 text-sm bg-stone-900 text-white px-4 py-2 rounded-lg disabled:opacity-40">
+            className="flex items-center gap-1 text-sm bg-stone-900 text-white px-4 py-2 rounded-lg disabled:opacity-40 min-h-[44px]"
+          >
             Next <ChevronRight size={16} />
           </button>
         ) : (
-          <button onClick={() => onDone(site)}
-            className="text-sm bg-green-700 text-white px-4 py-2 rounded-lg">
+          <button
+            type="button"
+            onClick={() => onDone(site)}
+            className="text-sm bg-green-700 text-white px-4 py-2 rounded-lg min-h-[44px]"
+          >
             Done
           </button>
         )}
       </div>
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-stone-900 text-white text-xs px-4 py-2 rounded-full shadow-lg z-50">
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-stone-900 text-white text-xs px-4 py-2 rounded-full shadow-lg z-50"
+        >
           {toast}
         </div>
       )}

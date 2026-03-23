@@ -19,11 +19,10 @@ export function saveSites(sites: SiteEntry[]): void {
 
 export function upsertSite(site: SiteEntry): void {
   const sites = loadSites()
-  const updated = { ...site, updatedAt: new Date().toISOString() }
   const exists = sites.some(s => s.id === site.id)
   const next = exists
-    ? sites.map(s => s.id === site.id ? updated : s)
-    : [...sites, updated]
+    ? sites.map(s => s.id === site.id ? site : s)
+    : [...sites, site]
   saveSites(next)
 }
 
