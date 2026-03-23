@@ -233,14 +233,40 @@ export default function Wizard({ initial, onDone, onCancel }: Props) {
               </div>
             )}
             <div className="text-sm space-y-1 text-stone-600">
+              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mt-1">Land & Physical</p>
               <p><strong>Name:</strong> {site.name}</p>
-              <p><strong>Address:</strong> {site.address}</p>
+              {site.address && <p><strong>Address:</strong> {site.address}</p>}
               {site.areaSqm && <p><strong>Area:</strong> {site.areaSqm} m²</p>}
-              {site.titleType && <p><strong>Title:</strong> {site.titleType}</p>}
+              {site.shapeFrontage && <p><strong>Shape/Frontage:</strong> {site.shapeFrontage}</p>}
+              {site.terrain && <p><strong>Terrain:</strong> {site.terrain}</p>}
+              {site.floodRisk && <p><strong>Flood Risk:</strong> {site.floodRisk}</p>}
+              {site.landNotes && <p><strong>Land Notes:</strong> {site.landNotes}</p>}
+
+              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mt-3">Legal & Planning</p>
+              {site.titleType && <p><strong>Title Type:</strong> {site.titleType}</p>}
               {site.zoning && <p><strong>Zoning:</strong> {site.zoning}</p>}
+              {site.ownershipStatus && <p><strong>Ownership:</strong> {site.ownershipStatus}</p>}
+              {site.permitStatus && <p><strong>Permit Status:</strong> {site.permitStatus}</p>}
+              {site.legalNotes && <p><strong>Legal Notes:</strong> {site.legalNotes}</p>}
+
+              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mt-3">Surroundings</p>
+              {site.roadAccess && <p><strong>Road Access:</strong> {site.roadAccess}</p>}
+              {site.nearbyAmenities.length > 0 && <p><strong>Amenities:</strong> {site.nearbyAmenities.join(", ")}</p>}
+              {site.competition && <p><strong>Competition:</strong> {site.competition}</p>}
+              {site.areaVibe && <p><strong>Area Vibe:</strong> {site.areaVibe}</p>}
+              {site.surroundingsNotes && <p><strong>Surroundings Notes:</strong> {site.surroundingsNotes}</p>}
+
+              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mt-3">Financials</p>
               {site.askingPriceVnd && <p><strong>Asking Price:</strong> {site.askingPriceVnd.toLocaleString()} VND</p>}
+              {site.askingPriceVnd && site.areaSqm && (
+                <p><strong>Price/m²:</strong> {Math.round(site.askingPriceVnd / site.areaSqm).toLocaleString()} VND</p>
+              )}
+              {site.estDevelopmentCostVnd && <p><strong>Est. Dev Cost:</strong> {site.estDevelopmentCostVnd.toLocaleString()} VND</p>}
               {site.rating && <p><strong>Rating:</strong> {"★".repeat(site.rating)}{"☆".repeat(5 - site.rating)}</p>}
-              <p><strong>Media files:</strong> {site.mediaFiles.filter(f => f.status === "uploaded").length}</p>
+              {site.financialNotes && <p><strong>Financial Notes:</strong> {site.financialNotes}</p>}
+
+              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mt-3">Media</p>
+              <p><strong>Uploaded files:</strong> {site.mediaFiles.filter(f => f.status === "uploaded").length}</p>
             </div>
             <div className="flex flex-col gap-2">
               <button onClick={saveToSheets} disabled={saving}
