@@ -1,17 +1,19 @@
-import { SiteEntry } from "./types"
+import { SiteEntry, createEmptySite } from "./types"
 
 const KEY = "site-recce-sites"
 
 export function loadSites(): SiteEntry[] {
   if (typeof window === "undefined") return []
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "[]")
+    const raw: unknown[] = JSON.parse(localStorage.getItem(KEY) ?? "[]")
+    return raw.map(r => ({ ...createEmptySite(), ...(r as Partial<SiteEntry>) }))
   } catch {
     return []
   }
 }
 
 export function saveSites(sites: SiteEntry[]): void {
+  if (typeof window === "undefined") return
   localStorage.setItem(KEY, JSON.stringify(sites))
 }
 
