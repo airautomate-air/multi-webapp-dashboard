@@ -26,8 +26,15 @@ export default function GpsButton({ onLocation }: GpsButtonProps) {
       )
       const data = await res.json()
       onLocation(data.display_name ?? `${lat}, ${lng}`, lat, lng)
-    } catch {
-      setError("Could not get location. Please type address.")
+    } catch (err) {
+      const geoErr = err as GeolocationPositionError
+      const msg =
+        geoErr?.code === 1
+          ? "Location permission denied. Please type the address."
+          : geoErr?.code === 3
+          ? "Location timed out. Please type the address."
+          : "Could not get location. Please type address."
+      setError(msg)
     } finally {
       setLoading(false)
     }

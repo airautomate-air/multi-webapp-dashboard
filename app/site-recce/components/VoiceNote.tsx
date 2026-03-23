@@ -1,7 +1,7 @@
 // app/site-recce/components/VoiceNote.tsx
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Mic, Square, Loader2 } from "lucide-react"
 
 interface VoiceNoteProps {
@@ -16,15 +16,17 @@ export default function VoiceNote({ field, onTranscript }: VoiceNoteProps) {
   const [errorMsg, setErrorMsg] = useState("")
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
 
   async function startRecording() {
     setErrorMsg("")
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
       const recorder = new MediaRecorder(stream)
       chunksRef.current = []
       recorder.ondataavailable = e => chunksRef.current.push(e.data)
-      recorder.onstop = () => transcribe(stream)
+      recorder.onstop = () => transcribe(streamRef.current!)
       recorderRef.current = recorder
       recorder.start()
       setState("recording")
@@ -35,7 +37,8 @@ export default function VoiceNote({ field, onTranscript }: VoiceNoteProps) {
   }
 
   function stopRecording() {
-    recorderRef.current?.stop()
+    if (!recorderRef.current) return
+    recorderRef.current.stop()
     setState("transcribing")
   }
 
@@ -52,10 +55,18 @@ export default function VoiceNote({ field, onTranscript }: VoiceNoteProps) {
       onTranscript(data.text)
       setState("idle")
     } catch (err) {
+      console.error("[VoiceNote] transcription error:", err)
       setErrorMsg("Transcription failed. Try again.")
       setState("error")
     }
   }
+
+  useEffect(() => {
+    return () => {
+      recorderRef.current?.stop()
+      streamRef.current?.getTracks().forEach(t => t.stop())
+    }
+  }, [])
 
   return (
     <div className="flex items-center gap-2">
