@@ -3,7 +3,7 @@
 
 import { useRef } from "react"
 import { SiteEntry, MediaFile } from "../types"
-import { upsertSite } from "../storage"
+import { loadSites, upsertSite } from "../storage"
 import { Camera, Video, FolderOpen, Loader2, AlertCircle, X, RotateCcw } from "lucide-react"
 
 interface Props {
@@ -11,19 +11,59 @@ interface Props {
   onUpdate: (site: SiteEntry) => void
 }
 
+// Reads the freshest version of a site from localStorage to avoid stale closures
+function freshSite(siteId: string, fallback: SiteEntry): SiteEntry {
+  return loadSites().find(s => s.id === siteId) ?? fallback
+}
+
+function applyToSite(
+  siteId: SiteEntry["id"],
+  fallback: SiteEntry,
+  apply: (s: SiteEntry) => SiteEntry,
+  onUpdate: (s: SiteEntry) => void
+) {
+  const current = freshSite(siteId, fallback)
+  const next = apply(current)
+  onUpdate(next)
+  upsertSite(next)
+}
+
 export default function MediaTab({ site, onUpdate }: Props) {
   const photoRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
+  const retryRef = useRef<HTMLInputElement>(null)
+  const retryTargetRef = useRef<MediaFile | null>(null)
 
   function removeThumbnail(localId: string) {
-    const next = {
-      ...site,
-      mediaFiles: site.mediaFiles.filter(m => m.localId !== localId),
+    applyToSite(site.id, site, s => ({
+      ...s,
+      mediaFiles: s.mediaFiles.filter(m => m.localId !== localId),
       updatedAt: new Date().toISOString(),
+    }), onUpdate)
+  }
+
+  function triggerRetry(m: MediaFile) {
+    retryTargetRef.current = m
+    retryRef.current?.click()
+  }
+
+  async function handleRetryFile(files: FileList | null) {
+    const target = retryTargetRef.current
+    retryTargetRef.current = null
+    if (!files || files.length === 0 || !target) return
+    const file = files[0]
+    if (file.size > 100 * 1024 * 1024) {
+      alert(`${file.name} exceeds 100MB limit.`)
+      return
     }
-    onUpdate(next)
-    upsertSite(next)
+    // Remove the failed entry before re-uploading
+    applyToSite(site.id, site, s => ({
+      ...s,
+      mediaFiles: s.mediaFiles.filter(m => m.localId !== target.localId),
+      updatedAt: new Date().toISOString(),
+    }), onUpdate)
+    await uploadFile(file)
   }
 
   async function handleFiles(files: FileList | null) {
@@ -33,32 +73,12 @@ export default function MediaTab({ site, onUpdate }: Props) {
         alert(`${file.name} exceeds 100MB limit and was skipped.`)
         continue
       }
-      await uploadFile(file, crypto.randomUUID())
+      await uploadFile(file)
     }
   }
 
-  async function retryUpload(failed: MediaFile) {
-    // Reset to pending state, then trigger file picker for re-selection
-    // Since we don't hold a File reference after upload attempt, open gallery picker
-    // as the simplest retry path; alternatively ask user to re-select
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = failed.type === "video" ? "video/*" : "image/*"
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-      if (file.size > 100 * 1024 * 1024) {
-        alert(`${file.name} exceeds 100MB limit.`)
-        return
-      }
-      // Remove the failed entry, upload fresh
-      removeThumbnail(failed.localId)
-      await uploadFile(file, crypto.randomUUID())
-    }
-    input.click()
-  }
-
-  async function uploadFile(file: File, localId: string) {
+  async function uploadFile(file: File) {
+    const localId = crypto.randomUUID()
     const pending: MediaFile = {
       localId,
       driveFileId: null,
@@ -68,19 +88,12 @@ export default function MediaTab({ site, onUpdate }: Props) {
       uploadedAt: null,
     }
 
-    // Use functional update pattern via latest site snapshot from localStorage
-    const currentSites = (() => {
-      try { return JSON.parse(localStorage.getItem("site-recce-sites") ?? "[]") } catch { return [] }
-    })()
-    const currentSite: SiteEntry = currentSites.find((s: SiteEntry) => s.id === site.id) ?? site
-
-    const withPending = {
-      ...currentSite,
-      mediaFiles: [...currentSite.mediaFiles, pending],
+    // Add pending entry using fresh localStorage snapshot
+    applyToSite(site.id, site, s => ({
+      ...s,
+      mediaFiles: [...s.mediaFiles, pending],
       updatedAt: new Date().toISOString(),
-    }
-    onUpdate(withPending)
-    upsertSite(withPending)
+    }), onUpdate)
 
     try {
       const fd = new FormData()
@@ -100,22 +113,18 @@ export default function MediaTab({ site, onUpdate }: Props) {
         status: "uploaded",
         uploadedAt: new Date().toISOString(),
       }
-
-      const afterUpload = {
-        ...withPending,
-        mediaFiles: withPending.mediaFiles.map(m => m.localId === localId ? done : m),
+      // Re-read fresh snapshot after async gap to avoid clobbering concurrent writes
+      applyToSite(site.id, site, s => ({
+        ...s,
+        mediaFiles: s.mediaFiles.map(m => m.localId === localId ? done : m),
         updatedAt: new Date().toISOString(),
-      }
-      onUpdate(afterUpload)
-      upsertSite(afterUpload)
+      }), onUpdate)
     } catch {
       const errFile: MediaFile = { ...pending, status: "error" }
-      const errSite = {
-        ...withPending,
-        mediaFiles: withPending.mediaFiles.map(m => m.localId === localId ? errFile : m),
-      }
-      onUpdate(errSite)
-      upsertSite(errSite)
+      applyToSite(site.id, site, s => ({
+        ...s,
+        mediaFiles: s.mediaFiles.map(m => m.localId === localId ? errFile : m),
+      }), onUpdate)
     }
   }
 
@@ -123,32 +132,35 @@ export default function MediaTab({ site, onUpdate }: Props) {
     <div className="flex flex-col gap-4">
       {site.mediaFiles.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
-          {site.mediaFiles.map(m => (
+          {site.mediaFiles.map((m, index) => (
             <div key={m.localId} className="relative aspect-square rounded-lg bg-stone-100 overflow-hidden">
-              {/* × remove button — always visible */}
+              {/* × remove button */}
               <button
+                type="button"
                 onClick={() => removeThumbnail(m.localId)}
                 className="absolute top-1 right-1 z-10 w-5 h-5 bg-stone-900/70 hover:bg-stone-900 text-white rounded-full flex items-center justify-center"
-                aria-label="Remove"
+                aria-label={`Remove ${m.type} ${index + 1}`}
               >
-                <X size={10} />
+                <X size={10} aria-hidden="true" />
               </button>
 
               {m.status === "pending" && (
                 <div className="absolute inset-0 flex items-center justify-center bg-stone-100">
-                  <Loader2 size={20} className="animate-spin text-stone-400" />
+                  <Loader2 size={20} className="animate-spin text-stone-400" aria-hidden="true" />
                 </div>
               )}
 
               {m.status === "error" && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-50 gap-1 px-1">
-                  <AlertCircle size={16} className="text-red-400" />
+                  <AlertCircle size={16} className="text-red-400" aria-hidden="true" />
                   <span className="text-[9px] text-red-400 text-center">Failed</span>
                   <button
-                    onClick={() => retryUpload(m)}
+                    type="button"
+                    onClick={() => triggerRetry(m)}
                     className="flex items-center gap-0.5 text-[9px] text-red-600 hover:text-red-800 mt-0.5"
+                    aria-label={`Retry upload for ${m.type} ${index + 1}`}
                   >
-                    <RotateCcw size={9} /> Retry
+                    <RotateCcw size={9} aria-hidden="true" /> Retry
                   </button>
                 </div>
               )}
@@ -159,6 +171,7 @@ export default function MediaTab({ site, onUpdate }: Props) {
                   target="_blank"
                   rel="noreferrer"
                   className="absolute inset-0 flex items-center justify-center text-3xl"
+                  aria-label={`View ${m.type} ${index + 1} on Drive`}
                 >
                   {m.type === "video" ? "🎬" : "🖼️"}
                 </a>
@@ -170,30 +183,37 @@ export default function MediaTab({ site, onUpdate }: Props) {
 
       <div className="flex gap-2">
         <button
+          type="button"
           onClick={() => photoRef.current?.click()}
           className="flex-1 flex items-center justify-center gap-1.5 bg-stone-900 text-white text-xs py-2.5 rounded-lg"
         >
-          <Camera size={14} /> Photo
+          <Camera size={14} aria-hidden="true" /> Photo
         </button>
         <button
+          type="button"
           onClick={() => videoRef.current?.click()}
           className="flex-1 flex items-center justify-center gap-1.5 bg-stone-700 text-white text-xs py-2.5 rounded-lg"
         >
-          <Video size={14} /> Video
+          <Video size={14} aria-hidden="true" /> Video
         </button>
         <button
+          type="button"
           onClick={() => galleryRef.current?.click()}
           className="flex-1 flex items-center justify-center gap-1.5 bg-stone-100 text-stone-700 text-xs py-2.5 rounded-lg"
         >
-          <FolderOpen size={14} /> Gallery
+          <FolderOpen size={14} aria-hidden="true" /> Gallery
         </button>
       </div>
 
-      {/* @ts-ignore - capture attribute not fully typed for input elements */}
-      <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handleFiles(e.target.files)} />
-      {/* @ts-ignore - capture attribute not fully typed for input elements */}
-      <input ref={videoRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={e => handleFiles(e.target.files)} />
-      <input ref={galleryRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={e => handleFiles(e.target.files)} />
+      <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={e => { handleFiles(e.target.files); e.target.value = "" }} />
+      <input ref={videoRef} type="file" accept="video/*" capture="environment" className="hidden"
+        onChange={e => { handleFiles(e.target.files); e.target.value = "" }} />
+      <input ref={galleryRef} type="file" accept="image/*,video/*" multiple className="hidden"
+        onChange={e => { handleFiles(e.target.files); e.target.value = "" }} />
+      {/* Dedicated retry input — scoped to correct media type via retryTargetRef */}
+      <input ref={retryRef} type="file" accept="image/*,video/*" className="hidden"
+        onChange={e => { handleRetryFile(e.target.files); e.target.value = "" }} />
 
       {site.mediaFiles.length === 0 && (
         <p className="text-xs text-stone-400 text-center">No media yet. Take photos or add from your gallery.</p>
