@@ -15,9 +15,10 @@ async function getOrCreateFolder(
   name: string,
   parentId?: string
 ): Promise<string> {
+  const safeName = name.replace(/'/g, "\\'")
   const parentQuery = parentId ? ` and '${parentId}' in parents` : ""
   const res = await drive.files.list({
-    q: `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentQuery}`,
+    q: `name='${safeName}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentQuery}`,
     fields: "files(id)",
   })
   if (res.data.files && res.data.files.length > 0) return res.data.files[0].id!
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
   const siteName = formData.get("siteName") as string
   const fileName = formData.get("fileName") as string
 
-  if (!file || !siteId || !siteName) {
+  if (!file || !siteId || !siteName || !fileName) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   }
 

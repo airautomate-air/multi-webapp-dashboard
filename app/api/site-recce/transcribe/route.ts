@@ -22,6 +22,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No audio" }, { status: 400 })
   }
 
+  if ((audio as Blob).size > 20 * 1024 * 1024) {
+    return NextResponse.json({ error: "Audio exceeds 20MB limit" }, { status: 413 })
+  }
+
   const arrayBuffer = await (audio as Blob).arrayBuffer()
   const base64 = Buffer.from(arrayBuffer).toString("base64")
   const mimeType = (audio as Blob).type || "audio/webm"

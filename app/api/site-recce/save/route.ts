@@ -48,6 +48,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 })
   }
 
+  if (!site?.id || !Array.isArray(site?.mediaFiles)) {
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 })
+  }
+
   try {
     const gauth = new google.auth.OAuth2()
     gauth.setCredentials({ access_token: session.accessToken as string })
